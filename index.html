@@ -1,0 +1,883 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex,nofollow">
+<meta name="referrer" content="no-referrer">
+<title>Lotto Bet Tracker</title>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+<style>
+:root{--blue:#006BB6;--orange:#F58426;--silver:#BEC0C2;--bg:#f2f4f6;--card:#fff;--ink:#231F20;--mut:#5f6368;--line:#d9dbdd;--ball:#e4e6e8;--hit:#F58426;--hitink:#000;--err:#b3470a;--good:#2e7d32;--warn:#e65100;
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0a0a0b;--card:#17181a;--ink:#fff;--mut:#BEC0C2;--line:#2d2f32;--ball:#2a2c2f;--err:#F58426;--good:#66bb6a;--warn:#ffa726}}
+:root[data-theme="dark"]{--bg:#0a0a0b;--card:#17181a;--ink:#fff;--mut:#BEC0C2;--line:#2d2f32;--ball:#2a2c2f;--err:#F58426;--good:#66bb6a;--warn:#ffa726}
+*{box-sizing:border-box}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+main{max-width:960px;margin:0 auto;padding:16px}
+h1{font-size:22px;margin:0}
+h2{font-size:15px;margin:0}
+.tools{display:flex;gap:6px;flex-wrap:wrap}
+.tools label{margin:0;cursor:pointer;display:inline-block;color:var(--ink);font-size:13px}
+.top{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin:4px 0 14px;padding-bottom:8px;border-bottom:4px solid var(--orange)}
+.tabs{display:flex;gap:6px;overflow-x:auto;padding-bottom:6px}
+.tab{border:1px solid var(--line);background:var(--card);color:var(--ink);padding:8px 14px;border-radius:999px;font-weight:600;cursor:pointer;white-space:nowrap}
+.tab.on{background:var(--blue);border-color:var(--blue);color:#fff}
+.info{color:var(--mut);margin:8px 2px 10px;font-size:13px}
+.rem{background:var(--card);border:1px solid var(--line);border-left:4px solid var(--orange);border-radius:10px;padding:8px 12px;margin-bottom:12px;font-size:13px}
+.rem>div{margin:3px 0}
+.chip{border:1px solid var(--line);background:var(--bg);color:var(--ink);border-radius:999px;padding:4px 10px;font-size:12px;cursor:pointer;margin:2px 4px 2px 0;font-family:inherit;display:inline-flex;align-items:center;gap:4px}
+.chip.go{background:var(--orange);color:#000;border:0;font-weight:700}
+.chip.smart{background:var(--blue);color:#fff;border:0;font-weight:700}
+.chip.purple{background:#673ab7;color:#fff;border:0;font-weight:700}
+.chip.teal{background:#00897b;color:#fff;border:0;font-weight:700}
+.actions{display:flex;gap:8px;margin:6px 0 12px;flex-wrap:wrap}
+button{font-family:inherit}
+.p2,.p3{border:0;border-radius:10px;padding:11px 18px;font-weight:700;font-size:14px;cursor:pointer}
+.p2{background:var(--blue);color:#fff}.p3{background:var(--orange);color:#000}
+.s{border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:8px;padding:6px 10px;cursor:pointer;font-size:13px}
+.ib{border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:8px;width:30px;height:28px;cursor:pointer;font-size:13px;padding:0;display:inline-grid;place-items:center}
+.ib:hover,.chip:hover,.s:hover{border-color:var(--orange)}
+.x{border:0;background:none;color:var(--mut);cursor:pointer;font-size:20px;line-height:1}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:12px}
+.stat{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px;text-align:center}
+.stat b{display:block;font-size:18px}.stat span{font-size:11px;color:var(--mut)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:12px;border-top:3px solid var(--blue)}
+.ch{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px}
+details.card>summary{cursor:pointer;font-weight:700;font-size:15px}
+details.card[open]>summary{margin-bottom:10px}
+.filters{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+select,input,textarea{padding:8px 9px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);font:inherit;font-size:14px}
+input:focus,select:focus,textarea:focus{outline:2px solid var(--orange)}
+.filters input{flex:1;min-width:150px}
+label{display:block;font-size:12px;color:var(--mut);margin:10px 0 3px}
+.db select,.db input,.db textarea{width:100%}
+.row{display:grid;grid-template-columns:140px 1fr 230px;align-items:center;gap:10px;padding:10px 0;border-top:1px solid var(--line)}
+.row:first-child{border-top:0}
+.row .c1{font-size:13px;font-weight:600}
+.row .c3{display:flex;flex-direction:column;align-items:flex-end;gap:6px}
+.l1{display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+.amt{font-size:13px;color:var(--mut)}
+.acts{display:flex;gap:4px}
+@media (max-width:640px){.row{grid-template-columns:1fr auto}.row .balls{grid-column:1/-1;order:3}.stats{grid-template-columns:repeat(2,1fr)}}
+.balls{display:flex;gap:4px;flex-wrap:wrap;align-items:center}
+.sep{color:var(--mut);font-weight:700}
+.b{width:30px;height:30px;border-radius:50%;background:var(--ball);display:grid;place-items:center;font-weight:700;font-size:13px;cursor:pointer;user-select:none;transition:transform .1s}
+.b:active{transform:scale(0.9)}
+.b.hit{background:var(--hit);color:var(--hitink)}
+.b.hot{background:#ef5350;color:#fff}
+.b.cold{background:#42a5f5;color:#fff}
+.meta{font-size:12px;color:var(--mut)}
+.tag{font-size:12px;font-weight:700;padding:3px 8px;border-radius:999px;background:var(--ball)}
+.tag.win{background:var(--hit);color:var(--hitink)}
+.scroll{overflow-x:auto}
+table{width:100%;min-width:760px;border-collapse:collapse;font-size:13px}
+th{text-align:left;color:var(--mut);font-size:11px;text-transform:uppercase;padding:6px 8px}
+td{padding:8px;border-top:1px solid var(--line);vertical-align:middle}
+td .b{width:24px;height:24px;font-size:11px}
+td .balls{gap:3px;flex-wrap:nowrap}
+.sb{display:grid;grid-template-columns:90px 1fr 34px;align-items:center;gap:8px;font-size:12px;margin:4px 0}
+.sb i{display:block;height:10px;background:var(--blue);border-radius:5px;min-width:2px}
+.np{display:inline-flex;align-items:center;gap:6px;margin:4px 14px 4px 0;font-size:12px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px}
+.grid>.card{margin-bottom:0}
+@media (max-width:640px){.grid{grid-template-columns:1fr}}
+.f input,.f select,.f textarea{width:100%}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.wide{width:100%;margin-top:12px}
+.foot{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+dialog{border:1px solid var(--line);border-radius:14px;padding:0;background:var(--card);color:var(--ink);width:min(580px,94vw);max-height:90vh;overflow:auto}
+dialog::backdrop{background:rgba(0,0,0,.55)}
+.dh{display:flex;justify-content:space-between;align-items:center;padding:14px 16px;border-bottom:3px solid var(--orange);font-size:16px}
+.db{padding:6px 16px 12px}
+.df{display:flex;justify-content:flex-end;gap:8px;padding:12px 16px;border-top:1px solid var(--line)}
+.err{color:var(--err);font-size:13px;min-height:18px;margin-top:6px}
+.warn-box{background:rgba(245,132,38,0.12);border:1px solid var(--orange);border-radius:8px;padding:8px 12px;margin:8px 0;font-size:12px;color:var(--ink)}
+.good-box{background:rgba(46,125,50,0.12);border:1px solid var(--good);border-radius:8px;padding:8px 12px;margin:8px 0;font-size:12px;color:var(--good)}
+.toast{position:fixed;left:50%;bottom:calc(16px + env(safe-area-inset-bottom,0px));transform:translate(-50%,30px);background:#231F20;color:#fff;padding:10px 14px;border-radius:10px;font-size:14px;opacity:0;pointer-events:none;transition:.2s;z-index:50;max-width:92vw}
+.toast.on{opacity:1;transform:translate(-50%,0);pointer-events:auto}
+.toast button{margin-left:10px;border:0;background:var(--orange);color:#000;font-weight:700;border-radius:6px;padding:4px 10px;cursor:pointer}
+.heatmap-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(42px,1fr));gap:6px;margin:12px 0}
+.heat-cell{border:1px solid var(--line);border-radius:8px;padding:6px 2px;text-align:center;font-size:11px;background:var(--bg);cursor:pointer;position:relative}
+.heat-cell b{display:block;font-size:13px}
+.heat-cell:hover{border-color:var(--orange)}
+.gap-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(70px,1fr));gap:6px;margin:12px 0}
+.gap-card{border:1px solid var(--line);border-radius:8px;padding:8px 4px;text-align:center;background:var(--bg);cursor:pointer}
+.gap-card.overdue{border-color:var(--orange);background:rgba(245,132,38,0.1)}
+.gap-card b{display:block;font-size:14px;margin-bottom:2px}
+.gap-card span{display:block;font-size:10px;color:var(--mut)}
+@media print{
+ :root,:root[data-theme]{--bg:#fff!important;--card:#fff!important;--ink:#000!important;--mut:#444!important;--line:#ccc!important;--ball:#e4e6e8!important}
+ main>*:not(#tcard){display:none!important}
+ #tcard{border:0}#tcard .noprint,.toast{display:none!important}
+ .scroll{overflow:visible}table{min-width:0}
+ .b{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+}
+#auth{position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;background:var(--bg);padding:16px}
+#auth[hidden]{display:none}
+#auth .box{background:var(--card);color:var(--ink);border:1px solid var(--line);border-top:4px solid var(--blue);border-radius:12px;padding:22px;width:100%;max-width:340px}
+#auth h2{margin:0 0 14px;font-size:18px}
+#auth input{width:100%;margin-bottom:10px;padding:10px;font-size:16px}
+#auth button{width:100%;padding:10px;font-size:15px;font-weight:700;cursor:pointer}
+#auth .m{color:var(--err);font-size:13px;min-height:18px;margin:4px 0 8px}
+body.locked main{display:none}
+</style>
+</head>
+<body class="locked">
+<div id="auth"><form class="box" onsubmit="doLogin(event)">
+<h2>🎟️ Lotto Bet Tracker</h2>
+<input id="ae" type="email" placeholder="Email" autocomplete="username" required>
+<input id="ap" type="password" placeholder="Password" autocomplete="current-password" required>
+<div class="m" id="am"></div>
+<button id="ab" type="submit">🔒 Sign in</button>
+</form></div>
+<main>
+<div class="top"><h1>🎟️ Lotto Bet Tracker v4</h1>
+  <div class="tools">
+    <button class="s" onclick="exportData()" title="Download backup file">💾 Backup</button>
+    <label class="s" title="Load backup file"><input type="file" accept=".json" hidden onchange="importData(event)">⬆ Restore</label>
+    <button class="s" onclick="openRecover()" title="Restore automatic earlier copy">⟲ Recover</button>
+    <button class="s" onclick="openSimModal()" title="Backtest strategies against draw history">🧪 Backtest</button>
+    <button class="s" onclick="openMatrixModal()" title="Number pair heatmap matrix">🔥 Heatmap</button>
+    <button class="s" onclick="openGapModal()" title="View draw absence gaps">⏳ Absence Gaps</button>
+    <button class="s" id="tt" onclick="toggleTheme()"></button>
+    <button class="s" onclick="doLogout()" title="Sign out and clear data from this device">🔒 Sign out</button>
+    <span class="meta" id="sync"></span>
+  </div></div>
+<div class="rem" id="rem" hidden></div>
+<div class="tabs" id="tabs"></div>
+<div class="info" id="info"></div>
+<div class="stats" id="stats"></div>
+<div class="grid">
+  <div class="card f"><h2 id="ibt">Add bets</h2>
+    <label>Draw date</label><input type="date" id="id" onchange="renderInline();analyzeSynergy('i');"><div class="meta" id="in"></div>
+    <label>My numbers — one combination per line</label>
+    <textarea id="it" rows="3" placeholder="05-12-18-27-33-41" oninput="analyzeSynergy('i')"></textarea>
+    
+    <!-- Strategy & Generator Toolbar -->
+    <div style="margin-top:6px;display:flex;gap:4px;flex-wrap:wrap;align-items:center">
+      <select id="istrat" style="padding:4px 8px;font-size:12px;">
+        <option value="hybrid">⚖️ Balanced Hybrid</option>
+        <option value="hot">🔥 Hot Streak</option>
+        <option value="cold">❄️ Overdue (Cold)</option>
+        <option value="golden">📐 Golden Ratio Sum</option>
+      </select>
+      <button class="chip smart" type="button" onclick="mSmartPick('i')">🧠 Generate Pick</button>
+      <button class="chip" type="button" onclick="mLucky('i')">🎲 Random</button>
+      <button class="chip go" type="button" onclick="openWheelModal()">⚙️ System Bet / Wheel</button>
+    </div>
+    
+    <div id="isynergy"></div>
+    <div id="if"></div>
+    <div class="two"><div><label>Cost per bet (₱)</label><input type="number" id="ic" min="0" value="25"></div>
+    <div><label>Play for</label><select id="ir"><option value="1">This draw only</option><option value="2">2 draws (this + next 1)</option><option value="3">3 draws (this + next 2)</option><option value="4">4 draws (this + next 3)</option><option value="5">5 draws (this + next 4)</option></select></div></div>
+    <div class="err" id="ie"></div><button class="p2 wide" onclick="saveBet(0,'i')">Save bets</button></div>
+  <div class="card f"><h2 id="xbt">Add result</h2>
+    <label>Draw date</label><input type="date" id="xd" onchange="renderInline()"><div class="meta" id="xn"></div>
+    <label>Winning numbers (6)</label><input id="xt" placeholder="05-09-18-22-33-40">
+    <label>Jackpot (₱, optional)</label><input type="number" id="xj" min="0">
+    <div class="err" id="xe"></div><button class="p3 wide" onclick="saveRes(0,'x')">Save result</button></div>
+</div>
+
+<div class="filters">
+  <select id="fp" onchange="F.period=this.value;lists()"><option value="all">All time</option><option value="month">This month</option><option value="last">Last month</option><option value="30">Last 30 days</option><option value="year">This year</option></select>
+  <select id="fs" onchange="F.status=this.value;lists()"><option value="all">All bets</option><option value="pending">Pending</option><option value="checked">Checked</option><option value="win">Winners (3+)</option></select>
+  <input id="fq" placeholder="🔍 Find number(s), e.g. 7 33" oninput="F.q=this.value;lists()">
+  <button class="s" onclick="clearF()">Clear</button>
+</div>
+
+<details class="card"><summary><span id="bt">My bets</span> <span class="meta" id="bcount" style="font-weight:400;margin-left:8px"></span></summary><div id="bets"></div></details>
+<details class="card"><summary id="dt">Draw results</summary><div id="draws"></div></details>
+<div class="card"><div class="ch"><h2 id="ft2">⭐ Favorite combinations</h2><button class="s" onclick="openFav()">＋ New favorite</button></div><div id="favs"></div></div>
+<details class="card"><summary id="st">📊 Stats</summary><div id="sbody"></div></details>
+
+<div class="card" id="tcard">
+  <div class="ch"><h2>All bets vs winning combinations</h2>
+    <div class="noprint" style="display:flex;gap:6px;flex-wrap:wrap">
+      <select id="ft" onchange="F.tg=this.value;renderTable()"></select>
+      <button class="s" onclick="exportCSV()">⬇ CSV</button><button class="s" onclick="window.print()">🖨 Print</button>
+    </div></div>
+  <div class="scroll" id="tbl"></div>
+</div>
+
+<p class="meta">Data is saved in this browser only. Use 💾 Backup (top right) now and then to keep a safe copy. Results must be typed in from the official PCSO draw.</p>
+</main>
+<dialog id="dlg"></dialog>
+<div class="toast" id="toast"></div>
+
+<script>
+const KEY='lotto-tracker';
+const G={'6/42':{max:42,days:[2,4,6],n:'Lotto 6/42',minSum:95,maxSum:160},'6/45':{max:45,days:[1,3,5],n:'Mega Lotto 6/45',minSum:105,maxSum:170},'6/49':{max:49,days:[2,4,0],n:'Super Lotto 6/49',minSum:115,maxSum:185},'6/55':{max:55,days:[1,3,6],n:'Grand Lotto 6/55',minSum:130,maxSum:205},'6/58':{max:58,days:[2,5,0],n:'Ultra Lotto 6/58',minSum:140,maxSum:215}};
+const DN=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+const $=id=>document.getElementById(id);
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const pad=n=>String(n).padStart(2,'0');
+const dash=n=>n.map(pad).join('-');
+const peso=n=>(n<0?'−':'')+'₱'+Math.abs(Number(n)).toLocaleString();
+const iso=d=>d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());
+const dow=s=>new Date(s+'T00:00:00').getDay();
+const todayS=()=>iso(new Date());
+const addDays=(s,n)=>{const d=new Date(s+'T00:00:00');d.setDate(d.getDate()+n);return iso(d)};
+const fmt=s=>{const d=new Date(s+'T00:00:00');return DN[d.getDay()]+', '+d.toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'})};
+const fmtS=s=>DN[dow(s)]+' '+new Date(s+'T00:00:00').toLocaleDateString(undefined,{month:'short',day:'numeric'});
+const drawDay=(g,s)=>G[g].days.includes(dow(s));
+function nextOnOrAfter(g,s){let d=s;for(let i=0;i<8;i++){if(drawDay(g,d))return d;d=addDays(d,1)}return s}
+const nextDraw=g=>nextOnOrAfter(g,todayS());
+function prevDraw(g){let d=todayS();for(let i=0;i<8;i++){if(drawDay(g,d))return d;d=addDays(d,-1)}return todayS()}
+const dayList=g=>G[g].days.slice().sort((a,b)=>((a+6)%7)-((b+6)%7)).map(d=>DN[d]).join(', ');
+const gopts=sel=>Object.keys(G).map(g=>`<option value="${g}"${g===sel?' selected':''}>${G[g].n}</option>`).join('');
+
+/* ---------- combinatorial wheeling ---------- */
+function getCombinations(arr, k) {
+  const results = [];
+  function helper(start, combo) {
+    if (combo.length === k) { results.push(combo.slice()); return; }
+    for (let i = start; i < arr.length; i++) {
+      combo.push(arr[i]);
+      helper(i + 1, combo);
+      combo.pop();
+    }
+  }
+  helper(0, []);
+  return results;
+}
+
+/* ---------- data ---------- */
+let uc=0;const uid=()=>Date.now()*1000+(++uc%1000);
+function norm(d){const a=x=>Array.isArray(x)?x:[];const o={bets:a(d.bets),draws:a(d.draws),favs:a(d.favs)};
+ o.bets.forEach(b=>{if(!b.id)b.id=uid();b.n=(b.n||[]).map(Number)});
+ o.draws.forEach(x=>{if(!x.id)x.id=uid();x.n=(x.n||[]).map(Number)});
+ o.favs.forEach(f=>{if(!f.id)f.id=uid();f.n=(f.n||[]).map(Number)});return o}
+function load(){let raw=null;try{raw=localStorage.getItem(KEY)}catch(e){}
+ if(!raw)return norm({});
+ try{return norm(JSON.parse(raw))}catch(e){try{localStorage.setItem(KEY+'-corrupt',raw)}catch(x){}
+  alert('Your saved data could not be read. A copy of it was kept in this browser (key "'+KEY+'-corrupt").');return norm({})}}
+let S=norm({}),cur='6/42',F={period:'all',status:'all',q:'',tg:'all'},pending=null,tt;
+function save(){try{const old=localStorage.getItem(KEY),nw=JSON.stringify(S);
+ if(old&&old!==nw){localStorage.setItem(KEY+'-prev',old);const t=todayS();
+  if(localStorage.getItem(KEY+'-day-date')!==t){localStorage.setItem(KEY+'-day',old);localStorage.setItem(KEY+'-day-date',t)}}
+ localStorage.setItem(KEY,nw)}catch(e){toast('⚠ Could not save to browser storage — please use Backup')}
+ cloudSave()}
+function mutate(fn,msg){const prev=JSON.stringify(S);fn();save();render();toast(msg,prev)}
+function toast(msg,prev){const t=$('toast');t.innerHTML=esc(msg)+(prev?' <button onclick="undo()">Undo</button>':'');t._p=prev;t.classList.add('on');clearTimeout(tt);tt=setTimeout(()=>t.classList.remove('on'),prev?7000:3500)}
+function undo(){const t=$('toast');if(!t._p)return;S=norm(JSON.parse(t._p));save();t.classList.remove('on');render()}
+const findDraw=(g,d)=>S.draws.find(x=>x.g===g&&x.d===d);
+function info(b){const w=findDraw(b.g,b.d);const hit=w?b.n.filter(x=>w.n.includes(x)):[];return{w,hit,k:hit.length}}
+function parse(t,g,expectedCount=6){const a=t.split(/[\s,.\-–—]+/).filter(Boolean).map(Number);
+ if(a.length!==expectedCount||a.some(isNaN))return'Enter exactly '+expectedCount+' numbers.';
+ if(a.some(n=>n<1||n>G[g].max||!Number.isInteger(n)))return'Numbers must be between 1 and '+G[g].max+' for '+g+'.';
+ if(new Set(a).size!==expectedCount)return'No duplicate numbers.';return a.sort((x,y)=>x-y)}
+
+/* ---------- SMART PICK STRATEGY ENGINE & CALCULATIONS ---------- */
+function getDrawHistoryBefore(gameKey, beforeDate = null) {
+  let list = S.draws.filter(d => d.g === gameKey);
+  if (beforeDate) list = list.filter(d => d.d < beforeDate);
+  return list.sort((a,b) => a.d.localeCompare(b.d));
+}
+
+function calculateAbsenceGaps(gameKey, beforeDate = null) {
+  const max = G[gameKey].max;
+  const history = getDrawHistoryBefore(gameKey, beforeDate);
+  const totalDraws = history.length;
+  
+  const currentGap = {};
+  const gapSum = {};
+  const gapCount = {};
+  const lastDrawIndex = {};
+
+  for (let i = 1; i <= max; i++) {
+    currentGap[i] = totalDraws;
+    gapSum[i] = 0;
+    gapCount[i] = 0;
+    lastDrawIndex[i] = -1;
+  }
+
+  history.forEach((d, index) => {
+    d.n.forEach(num => {
+      if (lastDrawIndex[num] !== undefined) {
+        const gap = index - lastDrawIndex[num] - 1;
+        gapSum[num] += gap;
+        gapCount[num]++;
+      }
+      lastDrawIndex[num] = index;
+    });
+  });
+
+  for (let i = 1; i <= max; i++) {
+    if (lastDrawIndex[i] !== -1) {
+      currentGap[i] = totalDraws - 1 - lastDrawIndex[i];
+    }
+  }
+
+  const result = {};
+  for (let i = 1; i <= max; i++) {
+    const avg = gapCount[i] > 0 ? (gapSum[i] / gapCount[i]) : (totalDraws || 10);
+    result[i] = {
+      currentGap: currentGap[i],
+      avgGap: Math.round(avg * 10) / 10,
+      isOverdue: currentGap[i] > avg * 1.3
+    };
+  }
+  return result;
+}
+
+function generateSmartPickAdvanced(gameKey, strategy = 'hybrid', beforeDate = null) {
+  const max = G[gameKey].max;
+  const history = getDrawHistoryBefore(gameKey, beforeDate);
+  const gaps = calculateAbsenceGaps(gameKey, beforeDate);
+  
+  // Frequencies calculation
+  const freq = {};
+  for (let i = 1; i <= max; i++) freq[i] = 1;
+  history.slice(-15).forEach(d => {
+    d.n.forEach(n => { if (freq[n]) freq[n] += 4; });
+  });
+
+  const pool = [];
+  for (let num = 1; num <= max; num++) {
+    let weight = 1;
+    if (strategy === 'hot') {
+      weight = freq[num];
+    } else if (strategy === 'cold') {
+      weight = Math.max(1, Math.round(gaps[num].currentGap));
+    } else if (strategy === 'golden' || strategy === 'hybrid') {
+      weight = freq[num] + Math.round(gaps[num].currentGap / 2);
+    }
+    for (let w = 0; w < weight; w++) pool.push(num);
+  }
+
+  const minSum = G[gameKey].minSum;
+  const maxSum = G[gameKey].maxSum;
+
+  for (let attempts = 0; attempts < 600; attempts++) {
+    const selected = new Set();
+    while (selected.size < 6) {
+      const pick = pool[Math.floor(Math.random() * pool.length)];
+      selected.add(pick);
+    }
+    const combo = [...selected].sort((a, b) => a - b);
+    const sum = combo.reduce((a, b) => a + b, 0);
+
+    // Filter checks
+    if (strategy === 'golden' && (sum < minSum || sum > maxSum)) continue;
+
+    const odds = combo.filter(n => n % 2 !== 0).length;
+    if (odds < 1 || odds > 5) continue;
+
+    let consecutive = 0;
+    for (let i = 0; i < combo.length - 1; i++) {
+      if (combo[i+1] === combo[i] + 1) consecutive++;
+    }
+    if (consecutive >= 2) continue;
+
+    return combo;
+  }
+
+  // Fallback
+  const fb = new Set();
+  while (fb.size < 6) fb.add(1 + Math.floor(Math.random() * max));
+  return [...fb].sort((a, b) => a - b);
+}
+
+/* ---------- FEATURE 4: COMBO SYNERGY & VARIANCE ANALYZER ---------- */
+function analyzeSynergy(prefix = 'i') {
+  const g = prefix === 'i' ? cur : $('mg').value;
+  const text = $(prefix + 't').value;
+  const lines = text.split('\n').map(x => x.trim()).filter(Boolean);
+  const container = $(prefix + 'synergy');
+  if (!container) return;
+
+  if (lines.length < 1) {
+    container.innerHTML = '';
+    return;
+  }
+
+  const validCombos = [];
+  lines.forEach(l => {
+    const p = parse(l, g);
+    if (Array.isArray(p)) validCombos.push(p);
+  });
+
+  if (validCombos.length === 0) {
+    container.innerHTML = '';
+    return;
+  }
+
+  const warnings = [];
+  const goods = [];
+
+  // 1. Decade Coverage Check across tickets
+  const decades = new Set();
+  validCombos.forEach(c => c.forEach(n => decades.add(Math.floor(n / 10))));
+  const maxDecades = Math.floor(G[g].max / 10);
+  const missingDecades = [];
+  for (let d = 0; d <= maxDecades; d++) {
+    if (!decades.has(d)) missingDecades.push(d === 0 ? '1-9' : (d * 10) + 's');
+  }
+  if (missingDecades.length > 0) {
+    warnings.push(`⚠️ Missing decade buckets across tickets: <b>${missingDecades.join(', ')}</b>.`);
+  } else {
+    goods.push(`✅ Great decade coverage across all lines!`);
+  }
+
+  // 2. Overlap Check between combinations
+  let highOverlapFound = false;
+  for (let i = 0; i < validCombos.length; i++) {
+    for (let j = i + 1; j < validCombos.length; j++) {
+      const common = validCombos[i].filter(n => validCombos[j].includes(n));
+      if (common.length >= 4) {
+        highOverlapFound = true;
+        warnings.push(`⚠️ High number overlap (${common.length} numbers: ${dash(common)}) between Line ${i+1} and Line ${j+1}.`);
+      }
+    }
+  }
+
+  // 3. Golden Ratio Sum Check per ticket
+  validCombos.forEach((c, idx) => {
+    const sum = c.reduce((a,b)=>a+b, 0);
+    if (sum < G[g].minSum || sum > G[g].maxSum) {
+      warnings.push(`⚠️ Line ${idx+1} sum (${sum}) falls outside typical target range (${G[g].minSum}–${G[g].maxSum}).`);
+    }
+  });
+
+  let html = '';
+  if (warnings.length) {
+    html += `<div class="warn-box">${warnings.join('<br>')}</div>`;
+  }
+  if (goods.length && !warnings.length) {
+    html += `<div class="good-box">${goods.join('<br>')}</div>`;
+  }
+  container.innerHTML = html;
+}
+
+/* ---------- FEATURE 2: BACKTESTING SIMULATOR ---------- */
+function openSimModal() {
+  shell('🧪 Strategy Backtesting Simulator', `
+    <label>Game</label><select id="simG">${gopts(cur)}</select>
+    <label>Select Strategy to Test</label>
+    <select id="simStrat">
+      <option value="hybrid">⚖️ Balanced Hybrid</option>
+      <option value="hot">🔥 Hot Streak</option>
+      <option value="cold">❄️ Overdue (Cold)</option>
+      <option value="golden">📐 Golden Ratio Sum</option>
+    </select>
+    <label>Number of Test Draws (Past History)</label>
+    <input type="number" id="simCount" value="20" min="5" max="50">
+    <div style="margin-top:12px">
+      <button class="p2 wide" onclick="runBacktest()">▶ Run Simulation</button>
+    </div>
+    <div id="simRes" style="margin-top:12px"></div>
+  `, cancelBtn);
+}
+
+function runBacktest() {
+  const g = $('simG').value;
+  const strat = $('simStrat').value;
+  const count = parseInt($('simCount').value, 10) || 20;
+  const history = getDrawHistoryBefore(g);
+
+  if (history.length < 10) {
+    $('simRes').innerHTML = `<div class="err">Not enough draw history to run simulation for ${g}. Add more draw results first!</div>`;
+    return;
+  }
+
+  const testDraws = history.slice(-Math.min(count, history.length));
+  let totalCost = 0;
+  let totalMatches = { 3: 0, 4: 0, 5: 0, 6: 0 };
+  let totalPrize = 0;
+
+  testDraws.forEach(draw => {
+    // Generate pick using ONLY history BEFORE this draw date
+    const pick = generateSmartPickAdvanced(g, strat, draw.d);
+    const hit = pick.filter(n => draw.n.includes(n)).length;
+    totalCost += 25;
+
+    if (hit === 3) { totalMatches[3]++; totalPrize += 50; }
+    else if (hit === 4) { totalMatches[4]++; totalPrize += 1500; }
+    else if (hit === 5) { totalMatches[5]++; totalPrize += 50000; }
+    else if (hit === 6) { totalMatches[6]++; totalPrize += (draw.j || 10000000); }
+  });
+
+  const net = totalPrize - totalCost;
+  const roi = Math.round((net / totalCost) * 100);
+
+  $('simRes').innerHTML = `
+    <div class="card" style="border-top-color:var(--orange)">
+      <b style="font-size:14px">Simulation Results (${testDraws.length} Draws)</b>
+      <div class="stats" style="margin-top:8px">
+        <div class="stat"><b>₱${totalCost}</b><span>Spent</span></div>
+        <div class="stat"><b>₱${totalPrize.toLocaleString()}</b><span>Won (Est.)</span></div>
+        <div class="stat"><b style="color:${roi>=0?'var(--good)':'var(--err)'}">${roi}%</b><span>ROI</span></div>
+        <div class="stat"><b>${totalMatches[3]+totalMatches[4]+totalMatches[5]+totalMatches[6]}</b><span>Wins (3+)</span></div>
+      </div>
+      <div class="meta" style="margin-top:6px">
+        Breakdown: 3-matches: <b>${totalMatches[3]}</b> | 4-matches: <b>${totalMatches[4]}</b> | 5-matches: <b>${totalMatches[5]}</b> | Jackpots: <b>${totalMatches[6]}</b>
+      </div>
+    </div>
+  `;
+}
+
+/* ---------- FEATURE 3: NUMBER PAIR & TRIPLET HEATMAP MATRIX ---------- */
+function openMatrixModal() {
+  const max = G[cur].max;
+  const history = getDrawHistoryBefore(cur);
+  const pairCounts = {};
+
+  history.forEach(d => {
+    for (let i = 0; i < d.n.length; i++) {
+      for (let j = i + 1; j < d.n.length; j++) {
+        const pair = `${d.n[i]}-${d.n[j]}`;
+        pairCounts[pair] = (pairCounts[pair] || 0) + 1;
+      }
+    }
+  });
+
+  const sortedPairs = Object.keys(pairCounts)
+    .map(p => ({ pair: p, count: pairCounts[p] }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 24);
+
+  shell(`🔥 Pair Frequency Heatmap (${cur})`, `
+    <div class="meta">Top most frequent number pairs in ${cur} draw history. Tap any pair to insert into your bets!</div>
+    <div class="heatmap-grid">
+      ${sortedPairs.map(p => `
+        <div class="heat-cell" onclick="addPairToBet('${p.pair}')">
+          <b>${p.pair}</b>
+          <span class="meta">${p.count}×</span>
+        </div>
+      `).join('')}
+    </div>
+  `, cancelBtn);
+}
+
+function addPairToBet(pairStr) {
+  mAppend(pairStr, 'i');
+  dlg.close();
+  toast(`Added pair ${pairStr} to bet input!`);
+}
+
+/* ---------- FEATURE 5: ABSENCE GAP VISUALIZER ---------- */
+function openGapModal() {
+  const gaps = calculateAbsenceGaps(cur);
+  const max = G[cur].max;
+
+  let html = `<div class="meta">Current draw absence gap for each number in ${cur}. Highlighted numbers are overdue. Tap a number to append it!</div><div class="gap-grid">`;
+  for (let num = 1; num <= max; num++) {
+    const g = gaps[num];
+    html += `
+      <div class="gap-card ${g.isOverdue ? 'overdue' : ''}" onclick="addNumToBet(${num})">
+        <b>${pad(num)}</b>
+        <span>Gap: ${g.currentGap} d</span>
+        <span>Avg: ${g.avgGap} d</span>
+      </div>
+    `;
+  }
+  html += `</div>`;
+  shell(`⏳ Draw Absence Gap Visualizer (${cur})`, html, cancelBtn);
+}
+
+function addNumToBet(num) {
+  const target = $('it');
+  if (target) {
+    const val = target.value.trim();
+    if (!val || val.endsWith('\n')) {
+      target.value += pad(num);
+    } else {
+      target.value += '-' + pad(num);
+    }
+  }
+  toast(`Appended ${pad(num)} to bet box`);
+}
+
+/* ---------- filters ---------- */
+function range(){const t=new Date(),y=t.getFullYear(),m=t.getMonth(),f=(a,b,c)=>iso(new Date(a,b,c));
+ switch(F.period){case'month':return[f(y,m,1),f(y,m+1,0)];case'last':return[f(y,m-1,1),f(y,m,0)];case'30':return[addDays(todayS(),-30),'9999'];case'year':return[f(y,0,1),f(y,11,31)];default:return['0000','9999']}}
+const qNums=()=>F.q.split(/\D+/).filter(Boolean).map(Number);
+function inRange(d){const[a,z]=range();return d>=a&&d<=z}
+function passBet(b){if(!inRange(b.d))return false;if(!qNums().every(n=>b.n.includes(n)))return false;
+ const i=info(b);if(F.status==='pending'&&i.w)return false;if(F.status==='checked'&&!i.w)return false;if(F.status==='win'&&i.k<3)return false;return true}
+const passDraw=x=>inRange(x.d)&&qNums().every(n=>x.n.includes(n));
+function clearF(){F={period:'all',status:'all',q:'',tg:F.tg};$('fp').value='all';$('fs').value='all';$('fq').value='';lists()}
+
+/* ---------- render ---------- */
+const balls=(n,hit=[])=>`<div class="balls">${n.map((x,i)=>(i?'<span class="sep">-</span>':'')+`<span class="b ${hit.includes(x)?'hit':''}">${pad(x)}</span>`).join('')}</div>`;
+function render(){renderRem();renderTabs();renderInline();renderStats();lists();renderFavs();renderStatsDetail()}
+let inG=null;
+function renderInline(){if(inG!==cur){inG=cur;$('id').value=nextDraw(cur);$('xd').value=prevDraw(cur)}
+ $('ibt').textContent='Add bets · '+cur;$('xbt').textContent='Add result · '+cur;
+ const note=d=>'Draws '+dayList(cur)+(d&&!drawDay(cur,d)?' — ⚠ not a draw day for '+cur:'');
+ $('in').textContent=note($('id').value);$('xn').textContent=note($('xd').value);
+ const l=S.favs.filter(f=>f.g===cur);
+ $('if').innerHTML=l.length?'<div class="meta" style="margin-top:6px">Favorites — tap to add:</div>'+l.map(f=>`<button class="chip" type="button" onclick="mAdd(${f.id},'i')">⭐ ${esc(f.name||dash(f.n))}</button>`).join(''):''}
+function fillBet(g,text){cur=g;render();mAppend(text,'i');$('it').focus();$('it').scrollIntoView({behavior:'smooth',block:'center'})}
+function fillRes(g,d){cur=g;render();$('xd').value=d;renderInline();const ex=findDraw(g,d);$('xt').value=ex?dash(ex.n):'';$('xj').value=ex&&ex.j?ex.j:'';$('xt').focus();$('xt').scrollIntoView({behavior:'smooth',block:'center'})}
+function lists(){renderBets();renderDraws();renderTable()}
+function goTab(g){cur=g;render()}
+function renderTabs(){$('tabs').innerHTML=Object.keys(G).map(g=>`<button class="tab ${g===cur?'on':''}" onclick="goTab('${g}')">${g}</button>`).join('');
+ $('info').textContent=`${G[cur].n} · draws ${dayList(cur)} · next draw: ${fmt(nextDraw(cur))}`;
+ ['bt','dt','ft2','st'].forEach((id,i)=>$(id).textContent=['My bets · ','Draw results · ','⭐ Favorite combinations · ','📊 Stats · '][i]+cur)}
+function renderRem(){const t=todayS();let h='';
+ const dg=Object.keys(G).filter(g=>drawDay(g,t));
+ if(dg.length)h+=`<div>📅 <b>Today (${DN[dow(t)]})</b> ${dg.map(g=>`<button class="chip" onclick="goTab('${g}')">${g} · ${S.bets.filter(b=>b.g===g&&b.d===t).length} bet(s)${findDraw(g,t)?' ✓ result in':''}</button>`).join('')}</div>`;
+ const from=addDays(t,-30),grp={};
+ S.bets.forEach(b=>{if(b.d<t&&b.d>=from&&!findDraw(b.g,b.d)){const k=b.g+'|'+b.d;grp[k]=(grp[k]||0)+1}});
+ const ks=Object.keys(grp).sort((a,b)=>b.split('|')[1].localeCompare(a.split('|')[1]));
+ if(ks.length)h+=`<div>⏳ <b>Waiting for results</b> (tap to enter) ${ks.slice(0,5).map(k=>{const[g,d]=k.split('|');return`<button class="chip go" onclick="fillRes('${g}','${d}')">${g} · ${fmtS(d)} · ${grp[k]}</button>`}).join('')}${ks.length>5?`<span class="meta">+${ks.length-5} more</span>`:''}</div>`;
+ let lb=null;try{lb=localStorage.getItem('lotto-last-backup')}catch(e){}
+ if(S.bets.length){const days=lb?Math.round((new Date(t)-new Date(lb))/864e5):null;
+  if(days===null||days>=14)h+=`<div>💾 ${days===null?'You haven’t made a backup yet.':'Last backup was '+days+' days ago.'} <button class="chip go" onclick="exportData()">Backup now</button></div>`}
+ $('rem').innerHTML=h;$('rem').hidden=!h}
+function renderStats(){const bets=S.bets.filter(b=>b.g===cur);let spent=0,done=0,wins=0;
+ bets.forEach(b=>{spent+=b.c;const i=info(b);if(i.w){done++;if(i.k>=3)wins++}});
+ $('stats').innerHTML=[[bets.length,'Bets'],[peso(spent),'Spent'],[done,'Checked'],[wins,'With 3+ matches']].map(s=>`<div class="stat"><b>${s[0]}</b><span>${s[1]}</span></div>`).join('')}
+function renderBets(){const all=S.bets.filter(b=>b.g===cur).sort((a,b)=>b.d.localeCompare(a.d)||b.id-a.id),list=all.filter(passBet);
+ $('bcount').textContent=all.length?`Showing ${list.length} of ${all.length}`:'';
+ $('bets').innerHTML=list.map(b=>{const i=info(b);let tag='<span class="tag">Pending</span>';
+  if(i.w)tag=i.k>=3?`<span class="tag win">${i.k===6?'🏆 JACKPOT':i.k+' of 6 — prize!'}</span>`:`<span class="tag">${i.k} of 6</span>`;
+  return`<div class="row"><div class="c1">${fmt(b.d)}</div>${balls(b.n,i.hit)}<div class="c3"><div class="l1"><span class="amt">Cost ${peso(b.c)}</span>${tag}</div><div class="acts"><button class="ib" title="Edit" onclick="openBet({id:${b.id},g:'${b.g}',d:'${b.d}',text:'${dash(b.n)}',c:${b.c}})">✎</button><button class="ib" title="Repeat for next draw" onclick="repBet(${b.id})">↻</button><button class="ib" title="Save as favorite" onclick="openFav({g:'${b.g}',text:'${dash(b.n)}'})">☆</button><button class="ib" title="Delete" onclick="delBet(${b.id})">×</button></div></div></div>`}).join('')
+  ||`<div class="meta">${all.length?'No bets match these filters.':'No bets yet for this game. Tap “＋ Add bets”.'}</div>`}
+function renderDraws(){const list=S.draws.filter(x=>x.g===cur&&passDraw(x)).sort((a,b)=>b.d.localeCompare(a.d));
+ $('draws').innerHTML=list.map(x=>`<div class="row"><div class="c1">${fmt(x.d)}</div>${balls(x.n)}<div class="c3"><div class="l1"><span class="amt">Jackpot ${x.j?peso(x.j):'—'}</span></div><div class="acts"><button class="ib" title="Edit" onclick="openRes({id:${x.id},g:'${x.g}',d:'${x.d}'})">✎</button><button class="ib" title="Delete" onclick="delDraw(${x.id})">×</button></div></div></div>`).join('')
+  ||'<div class="meta">No results to show. Tap “＋ Add result”.</div>'}
+function renderFavs(){const l=S.favs.filter(f=>f.g===cur);
+ $('favs').innerHTML=l.map(f=>`<div class="row"><div class="c1">${esc(f.name||'—')}</div>${balls(f.n)}<div class="c3"><div class="acts"><button class="s" onclick="fillBet('${f.g}','${dash(f.n)}')">Add as bet</button><button class="ib" title="Edit" onclick="openFav({id:${f.id}})">✎</button><button class="ib" title="Delete" onclick="delFav(${f.id})">×</button></div></div></div>`).join('')
+  ||'<div class="meta">No favorites yet. Tap ☆ on any bet, or “＋ New favorite”, to keep combinations you play often.</div>'}
+function tableRows(){return S.bets.filter(b=>(F.tg==='all'||b.g===F.tg)&&passBet(b)).sort((a,b)=>b.d.localeCompare(a.d)||b.id-a.id).map(b=>({b,...info(b)}))}
+function renderTable(){const sel=$('ft');sel.innerHTML='<option value="all">All games</option>'+Object.keys(G).map(g=>`<option value="${g}"${F.tg===g?' selected':''}>${g}</option>`).join('');sel.value=F.tg;
+ const rows=tableRows().map(({b,w,hit})=>`<tr><td><b>${b.g}</b></td><td>${fmt(b.d)}</td><td>${balls(b.n,hit)}</td><td>${w?balls(w.n,hit):'<span class="meta">Not yet entered</span>'}</td><td>${w?hit.length+' / 6':'—'}</td><td>${peso(b.c)}</td><td>${w&&w.j?peso(w.j):'—'}</td></tr>`).join('');
+ $('tbl').innerHTML=rows?`<table><thead><tr><th>Game</th><th>Draw date</th><th>My bet</th><th>Winning combo</th><th>Matches</th><th>Cost</th><th>Jackpot</th></tr></thead><tbody>${rows}</tbody></table>`:'<div class="meta">Nothing to show with the current filters.</div>'}
+function renderStatsDetail(){const bets=S.bets.filter(b=>b.g===cur);
+ if(!bets.length){$('sbody').innerHTML='<div class="meta">Add some bets to see stats.</div>';return}
+ const dist=[0,0,0,0,0,0,0],pl={},mt={};let best=-1,spent=0;
+ bets.forEach(b=>{spent+=b.c;const i=info(b);b.n.forEach(n=>{pl[n]=(pl[n]||0)+1;if(i.w&&i.w.n.includes(n))mt[n]=(mt[n]||0)+1});if(i.w){dist[i.k]++;best=Math.max(best,i.k)}});
+ const chk=dist.reduce((a,b)=>a+b,0),mx=Math.max(1,...dist);
+ const top=Object.keys(pl).map(Number).sort((a,b)=>pl[b]-pl[a]||(mt[b]||0)-(mt[a]||0)||a-b).slice(0,10);
+ $('sbody').innerHTML=`<div class="meta" style="margin-bottom:8px">${bets.length} bets · ${peso(spent)} spent · ${chk} checked${chk?' · best: '+best+' of 6 · 3+ matches: '+Math.round(100*(dist[3]+dist[4]+dist[5]+dist[6])/chk)+'%':''}</div>
+ <b style="font-size:13px">How your bets matched</b>${dist.map((c,i)=>`<div class="sb"><span>${i} of 6</span><i style="width:${Math.round(100*c/mx)}%"></i><b>${c}</b></div>`).join('')}
+ <div style="margin-top:12px"><b style="font-size:13px">Your most-played numbers</b></div><div>${top.map(n=>`<span class="np"><span class="b">${pad(n)}</span>played ${pl[n]}× · matched ${mt[n]||0}×</span>`).join('')}</div>
+ <div class="meta" style="margin-top:8px">Just for fun — every draw is independent, so past matches don’t predict future ones.</div>`}
+
+/* ---------- modals ---------- */
+const dlg=$('dlg');dlg.addEventListener('click',e=>{if(e.target===dlg)dlg.close()});
+const shell=(title,body,foot)=>{dlg.innerHTML=`<div class="dh"><b>${title}</b><button class="x" onclick="dlg.close()">×</button></div><div class="db">${body}</div><div class="df">${foot}</div>`;dlg.showModal()};
+const cancelBtn='<button class="s" onclick="dlg.close()">Cancel</button>';
+function openBet(o={}){const g=o.g||cur,d=o.d||nextDraw(g),ed=!!o.id;
+ shell(ed?'Edit bet':'Add bets',`
+ <label>Game</label><select id="mg" onchange="mChange()">${gopts(g)}</select>
+ <label>Draw date</label><input type="date" id="md" value="${d}" onchange="mChange()"><div class="meta" id="mn"></div>
+ <label>${ed?'Numbers':'Numbers — one combination per line'}</label><textarea id="mt" rows="${ed?1:4}" placeholder="05-12-18-27-33-41" oninput="analyzeSynergy('m')">${esc(o.text||'')}</textarea>
+ ${ed?'':'<div style="margin-top:6px;display:flex;gap:4px;flex-wrap:wrap;align-items:center"><select id="mstrat" style="padding:4px 8px;font-size:12px;"><option value="hybrid">⚖️ Balanced Hybrid</option><option value="hot">🔥 Hot Streak</option><option value="cold">❄️ Overdue (Cold)</option><option value="golden">📐 Golden Ratio Sum</option></select><button class="chip smart" type="button" onclick="mSmartPick()">🧠 Smart Pick</button><button class="chip" type="button" onclick="mLucky()">🎲 Random</button><button class="chip go" type="button" onclick="openWheelModal()">⚙️ System Bet / Wheel</button></div><div id="msynergy"></div><div id="mf"></div>'}
+ <label>Cost per bet (₱)</label><input type="number" id="mc" min="0" value="${o.c??25}">
+ ${ed?'':'<label>Play for</label><select id="mr"><option value="1">This draw only</option><option value="2">2 draws (this + next 1)</option><option value="3">3 draws (this + next 2)</option><option value="4">4 draws (this + next 3)</option><option value="5">5 draws (this + next 4)</option></select>'}
+ <div class="err" id="me"></div>`,`${cancelBtn}<button class="p2" onclick="saveBet(${ed?o.id:0})">${ed?'Save changes':'Save'}</button>`);mChange()}
+function mChange(){const g=$('mg').value,d=$('md').value;
+ $('mn').textContent='Draws '+dayList(g)+(d&&!drawDay(g,d)?' — ⚠ not a draw day for '+g:'');
+ const mf=$('mf');if(mf){const l=S.favs.filter(f=>f.g===g);
+  mf.innerHTML=l.length?'<div class="meta" style="margin-top:6px">Tap a favorite to add it:</div>'+l.map(f=>`<button class="chip" type="button" onclick="mAdd(${f.id})">⭐ ${esc(f.name||dash(f.n))}</button>`).join(''):''}}
+function mAppend(text,p='m'){const t=$(p+'t');t.value=t.value.trim()?t.value.replace(/\s*$/,'')+'\n'+text:text;analyzeSynergy(p);}
+const mAdd=(id,p='m')=>mAppend(dash(S.favs.find(f=>f.id==id).n),p);
+function mLucky(p='m'){const m=G[p==='m'?$('mg').value:cur].max,a=new Set();while(a.size<6)a.add(1+Math.floor(Math.random()*m));mAppend(dash([...a].sort((x,y)=>x-y)),p)}
+function mSmartPick(p='m'){
+  const g=p==='m'?$('mg').value:cur;
+  const strat=$(p+'strat')?$(p+'strat').value:'hybrid';
+  mAppend(dash(generateSmartPickAdvanced(g, strat)),p);
+}
+
+/* ---------- SYSTEM BET MODAL ---------- */
+function openWheelModal(){
+  const g = $('mg') ? $('mg').value : cur;
+  shell('System Bet & Wheeling Generator', `
+    <label>Game</label><select id="wg">${gopts(g)}</select>
+    <label>Select System Type</label>
+    <select id="wtype" onchange="updateWheelCalc()">
+      <option value="7">System 7 (Pick 7 numbers = 7 combinations)</option>
+      <option value="8">System 8 (Pick 8 numbers = 28 combinations)</option>
+      <option value="9">System 9 (Pick 9 numbers = 84 combinations)</option>
+      <option value="10">System 10 (Pick 10 numbers = 210 combinations)</option>
+      <option value="11">System 11 (Pick 11 numbers = 462 combinations)</option>
+      <option value="12">System 12 (Pick 12 numbers = 924 combinations)</option>
+    </select>
+    <label>Enter Pool Numbers (separated by dashes/spaces)</label>
+    <input id="wnums" placeholder="e.g. 02-07-11-15-21-33-42" oninput="updateWheelCalc()">
+    <div style="margin-top:6px;display:flex;gap:4px;flex-wrap:wrap">
+      <button class="chip smart" type="button" onclick="autoFillWheelPool('hybrid')">🧠 Auto-pick (Hybrid)</button>
+      <button class="chip purple" type="button" onclick="autoFillWheelPool('hot')">🔥 Hot Pool</button>
+      <button class="chip teal" type="button" onclick="autoFillWheelPool('cold')">❄️ Cold Pool</button>
+    </div>
+    <div id="wsummary" class="meta" style="margin-top:10px;font-weight:600"></div>
+    <div class="err" id="we"></div>
+  `, `${cancelBtn}<button class="p2" onclick="applyWheelCombos()">Generate & Add Bets</button>`);
+  updateWheelCalc();
+}
+
+function updateWheelCalc() {
+  const count = parseInt($('wtype').value, 10);
+  const gameKey = $('wg').value;
+  const inputVal = $('wnums').value;
+  const err = $('we');
+  const summary = $('wsummary');
+  
+  const parsed = parse(inputVal, gameKey, count);
+  if (typeof parsed === 'string') {
+    err.textContent = parsed;
+    summary.textContent = `Required: ${count} numbers. Estimated Cost: ₱${(getCombinations(new Array(count).fill(0), 6).length * 25).toLocaleString()}`;
+  } else {
+    err.textContent = '';
+    const combos = getCombinations(parsed, 6);
+    summary.textContent = `Valid Pool! ${combos.length} combinations generated. Total cost: ₱${(combos.length * 25).toLocaleString()}`;
+  }
+}
+
+function autoFillWheelPool(strategy = 'hybrid') {
+  const count = parseInt($('wtype').value, 10);
+  const gameKey = $('wg').value;
+  const pool = new Set();
+  
+  const smart = generateSmartPickAdvanced(gameKey, strategy);
+  smart.forEach(n => pool.add(n));
+  
+  while (pool.size < count) {
+    pool.add(1 + Math.floor(Math.random() * G[gameKey].max));
+  }
+  
+  const sorted = [...pool].sort((a,b) => a - b);
+  $('wnums').value = dash(sorted);
+  updateWheelCalc();
+}
+
+function applyWheelCombos() {
+  const count = parseInt($('wtype').value, 10);
+  const gameKey = $('wg').value;
+  const parsed = parse($('wnums').value, gameKey, count);
+  if (typeof parsed === 'string') {
+    $('we').textContent = parsed; return;
+  }
+  
+  const combos = getCombinations(parsed, 6);
+  combos.forEach(c => mAppend(dash(c), $('mt') ? 'm' : 'i'));
+  dlg.close();
+  toast(`Added ${combos.length} wheeled combinations!`);
+}
+
+function saveBet(eid,p='m'){const g=p==='m'?$('mg').value:cur,d=$(p+'d').value,c=+$(p+'c').value||0,err=$(p+'e');
+ if(!d){err.textContent='Pick a date.';return}
+ const lines=$(p+'t').value.split('\n').map(x=>x.trim()).filter(Boolean);
+ if(!lines.length){err.textContent='Enter at least one combination.';return}
+ if(eid&&lines.length>1){err.textContent='Edit one combination at a time.';return}
+ const combos=[];for(let i=0;i<lines.length;i++){const n=parse(lines[i],g);if(typeof n==='string'){err.textContent=(lines.length>1?'Line '+(i+1)+': ':'')+n;return}combos.push(n)}
+ err.textContent='';
+ if(p==='m'){cur=g;dlg.close()}else $('it').value='';
+ if(eid)mutate(()=>Object.assign(S.bets.find(x=>x.id==eid),{g,d,n:combos[0],c}),'Bet updated');
+ else{const reps=+$(p+'r').value,ds=[d];while(ds.length<reps)ds.push(nextOnOrAfter(g,addDays(ds[ds.length-1],1)));const cnt=ds.length*combos.length;
+  mutate(()=>ds.forEach(dt=>combos.forEach(n=>S.bets.push({id:uid(),g,d:dt,n,c}))),cnt+' bet'+(cnt>1?'s':'')+' added')}}
+function repBet(id){const b=S.bets.find(x=>x.id==id),from=addDays(b.d,1)>todayS()?addDays(b.d,1):todayS(),d=nextOnOrAfter(b.g,from);
+ if(S.bets.some(x=>x.g===b.g&&x.d===d&&dash(x.n)===dash(b.n))){toast('Already added for '+fmtS(d));return}
+ mutate(()=>S.bets.push({id:uid(),g:b.g,d,n:b.n.slice(),c:b.c}),'Repeated for '+fmt(d))}
+const delBet=id=>mutate(()=>S.bets=S.bets.filter(b=>b.id!=id),'Bet deleted');
+
+function openRes(o={}){let g=o.g||cur,d=o.d||prevDraw(g),ex=o.id?S.draws.find(x=>x.id==o.id):findDraw(g,d);
+ shell(ex?'Edit result':'Add result',`
+ <label>Game</label><select id="rg">${gopts(g)}</select>
+ <label>Draw date</label><input type="date" id="rd" value="${d}">
+ <label>Winning numbers (6)</label><input id="rt" placeholder="05-09-18-22-33-40" value="${ex?dash(ex.n):''}">
+ <label>Jackpot (₱, optional)</label><input type="number" id="rj" min="0" value="${ex&&ex.j?ex.j:''}">
+ <div class="err" id="re"></div>`,`${cancelBtn}<button class="p2" onclick="saveRes(${ex?ex.id:0})">Save result</button>`)}
+function saveRes(eid,p='r'){const g=p==='r'?$('rg').value:cur,d=$(p+'d').value,n=parse($(p+'t').value,g),j=+$(p+'j').value||0,err=$(p+'e');
+ if(!d){err.textContent='Pick a date.';return}
+ if(typeof n==='string'){err.textContent=n;return}
+ err.textContent='';
+ if(p==='r'){cur=g;dlg.close()}else{$('xt').value='';$('xj').value=''}
+ mutate(()=>{S.draws=S.draws.filter(x=>x.id!=eid&&!(x.g===g&&x.d===d));S.draws.push({id:eid||uid(),g,d,n,j})},'Result saved')}
+const delDraw=id=>mutate(()=>S.draws=S.draws.filter(x=>x.id!=id),'Result deleted');
+
+function openFav(o={}){const f=o.id?S.favs.find(x=>x.id==o.id):null,g=f?f.g:(o.g||cur);
+ shell(f?'Edit favorite':'New favorite',`
+ <label>Game</label><select id="fg">${gopts(g)}</select>
+ <label>Name (optional, e.g. “Birthdays”)</label><input id="fn" value="${f?esc(f.name||''):''}" maxlength="30">
+ <label>Numbers (6)</label><input id="fnn" placeholder="05-12-18-27-33-41" value="${f?dash(f.n):esc(o.text||'')}">
+ <div class="err" id="fe"></div>`,`${cancelBtn}<button class="p2" onclick="saveFav(${f?f.id:0})">Save favorite</button>`)}
+function saveFav(eid){const g=$('fg').value,n=parse($('fnn').value,g),name=$('fn').value.trim();
+ if(typeof n==='string'){$('fe').textContent=n;return}
+ cur=g;dlg.close();
+ mutate(()=>{if(eid)Object.assign(S.favs.find(x=>x.id==eid),{g,n,name});else S.favs.push({id:uid(),g,n,name})},'Favorite saved')}
+const delFav=id=>mutate(()=>S.favs=S.favs.filter(f=>f.id!=id),'Favorite removed');
+
+/* ---------- backup / restore / export ---------- */
+function download(name,text,type){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([text],{type}));a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),2000)}
+function exportData(){download('lotto-backup-'+todayS()+'.json',JSON.stringify({v:4,bets:S.bets,draws:S.draws,favs:S.favs}),'application/json');
+ try{localStorage.setItem('lotto-last-backup',todayS())}catch(e){}renderRem();toast('Backup downloaded')}
+function exportCSV(){const q=v=>'"'+String(v).replace(/"/g,'""')+'"';
+ const L=[['Game','Draw date','My numbers','Winning numbers','Matches','Cost','Jackpot'].map(q).join(',')];
+ tableRows().forEach(({b,w,hit})=>L.push([b.g,b.d,dash(b.n),w?dash(w.n):'',w?hit.length:'',b.c,w&&w.j?w.j:''].map(q).join(',')));
+ download('lotto-bets-'+todayS()+'.csv','\ufeff'+L.join('\r\n'),'text/csv')}
+function importData(e){const f=e.target.files[0];e.target.value='';if(!f)return;const r=new FileReader();
+ r.onload=()=>{let d;try{d=JSON.parse(r.result)}catch(x){toast('That file could not be read.');return}
+  if(!d||!Array.isArray(d.bets)||!Array.isArray(d.draws)){toast('This doesn’t look like a lotto backup file.');return}
+  pending=norm(d);
+  shell('Restore backup',`<p>This backup has <b>${pending.bets.length}</b> bets, <b>${pending.draws.length}</b> results and <b>${pending.favs.length}</b> favorites.<br>Right now you have <b>${S.bets.length}</b> bets, <b>${S.draws.length}</b> results and <b>${S.favs.length}</b> favorites.</p>
+  <p class="meta"><b>Merge</b> adds whatever is missing and keeps everything you have now (safest). <b>Replace</b> swaps your current data for the file’s. You can Undo either one.</p>`,
+  `${cancelBtn}<button class="s" onclick="doReplace()">Replace</button><button class="p2" onclick="doMerge()">Merge</button>`)};
+ r.readAsText(f)}
+function doMerge(){dlg.close();mutate(()=>{const bi=new Set(S.bets.map(b=>b.id)),fi=new Set(S.favs.map(b=>b.id)),dk=new Set(S.draws.map(x=>x.g+'|'+x.d));
+ pending.bets.forEach(b=>{if(!bi.has(b.id))S.bets.push(b)});pending.draws.forEach(x=>{if(!dk.has(x.g+'|'+x.d))S.draws.push(x)});pending.favs.forEach(x=>{if(!fi.has(x.id))S.favs.push(x)})},'Backup merged')}
+function doReplace(){dlg.close();mutate(()=>{S=pending},'Data replaced from backup')}
+function openRecover(){const items=[['Before your most recent change',KEY+'-prev'],['Start of the last day you used it',KEY+'-day']];let h='';
+ items.forEach(([label,k],i)=>{let d=null;try{d=JSON.parse(localStorage.getItem(k))}catch(e){}
+  if(d&&Array.isArray(d.bets)){const n=norm(d);window['_rec'+i]=n;h+=`<div class="row" style="grid-template-columns:1fr auto"><div><b>${label}</b><div class="meta">${n.bets.length} bets · ${n.draws.length} results · ${n.favs.length} favorites</div></div><button class="s" onclick="doRecover(${i})">Restore this</button></div>`}});
+ shell('Recover an earlier copy',h||'<p class="meta">No earlier copies are available yet. They’re created automatically as you make changes.</p>',cancelBtn)}
+function doRecover(i){dlg.close();mutate(()=>{S=window['_rec'+i]},'Earlier copy restored')}
+
+/* ---------- theme ---------- */
+const curTheme=()=>document.documentElement.dataset.theme||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');
+function setTheme(t,keep=true){document.documentElement.dataset.theme=t;if(keep)try{localStorage.setItem('lotto-theme',t)}catch(e){}$('tt').textContent=t==='dark'?'☀️ Light mode':'🌙 Dark mode'}
+const toggleTheme=()=>setTheme(curTheme()==='dark'?'light':'dark');
+let sv=null;try{sv=localStorage.getItem('lotto-theme')}catch(e){}
+if(sv)setTheme(sv,false);else $('tt').textContent=curTheme()==='dark'?'☀️ Light mode':'🌙 Dark mode';
+
+/* ---------- login + cloud sync (Firebase) ---------- */
+const FIREBASE_CONFIG={
+  apiKey:"AIzaSyCF9VcEkFuBRDKpHKOMKCHd23xrAvi6lHQ",
+  authDomain:"lotto-tracker-v5.firebaseapp.com",
+  databaseURL:"https://lotto-tracker-v5-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId:"lotto-tracker-v5",
+  appId:"1:506761132639:web:c15ac30aaf7fe1dc6c79ea"
+};
+let fbUser=null,fbRef=null,auth=null,db=null,fails=0,lockUntil=0;
+const canon=o=>JSON.stringify(o,(k,v)=>v&&typeof v==='object'&&!Array.isArray(v)?Object.keys(v).sort().reduce((r,x)=>(r[x]=v[x],r),{}):v);
+const setSync=t=>{const e=$('sync');if(e)e.textContent=t};
+function cloudSave(){if(!fbRef)return;setSync('☁ Saving…');
+ const d=JSON.parse(JSON.stringify(S));d.updatedAt=Date.now();
+ fbRef.set(d).then(()=>setSync('☁ Synced')).catch(()=>{setSync('☁ Not synced');toast('⚠ Could not sync to the cloud')})}
+function startSync(){stopSync();fbRef=db.ref('users/'+fbUser.uid+'/data');
+ fbRef.on('value',snap=>{const v=snap.val();setSync('☁ Synced');
+  if(v===null){if(S.bets.length||S.draws.length||S.favs.length)cloudSave();else toast('Cloud is empty — use ⬆ Restore to load your backup file');return}
+  const n=norm(v);if(canon(n)!==canon(S)){S=n;try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}render()}},
+  ()=>setSync('☁ Sync error'))}
+function stopSync(){if(fbRef){fbRef.off();fbRef=null}}
+function clearLocal(){try{[KEY,KEY+'-prev',KEY+'-day',KEY+'-day-date',KEY+'-corrupt'].forEach(k=>localStorage.removeItem(k))}catch(e){}}
+function lockUI(msg){document.body.classList.add('locked');$('auth').hidden=false;if(msg)$('am').textContent=msg}
+function doLogin(ev){ev.preventDefault();const m=$('am');
+ if(!auth){return}
+ if(Date.now()<lockUntil){m.textContent='Too many attempts. Wait '+Math.ceil((lockUntil-Date.now())/1000)+'s.';return}
+ m.textContent='';$('ab').disabled=true;
+ auth.signInWithEmailAndPassword($('ae').value.trim(),$('ap').value)
+  .then(()=>{fails=0;$('ap').value=''})
+  .catch(err=>{if(++fails>=5){lockUntil=Date.now()+30000;fails=0}
+   m.textContent=err.code==='auth/too-many-requests'?'Too many attempts. Try again later.':'Incorrect email or password.'})
+  .finally(()=>{$('ab').disabled=false})}
+function doLogout(){if(!confirm('Sign out? Your data stays safe in the cloud and will be cleared from this device.'))return;auth.signOut()}
+if(typeof firebase==='undefined'){lockUI('Could not load Firebase. Check your internet connection and reload.')}
+else if(FIREBASE_CONFIG.apiKey.startsWith('PASTE')){lockUI('Firebase is not set up yet. Paste your config into FIREBASE_CONFIG in index.html.')}
+else{
+ firebase.initializeApp(FIREBASE_CONFIG);auth=firebase.auth();db=firebase.database();
+ auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL).catch(()=>{});
+ auth.onAuthStateChanged(u=>{
+  if(u){fbUser=u;S=load();document.body.classList.remove('locked');$('auth').hidden=true;render();startSync()}
+  else{fbUser=null;stopSync();clearLocal();S=norm({});render();lockUI()}})}
+render();
+</script>
+</body>
+</html>
