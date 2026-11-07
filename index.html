@@ -152,6 +152,25 @@ button,.tab,.chip,.s,.ib,.b,summary{touch-action:manipulation;-webkit-tap-highli
  .heatmap-grid{grid-template-columns:repeat(auto-fill,minmax(38px,1fr))}
 }
 @media (max-width:420px){.two{grid-template-columns:1fr}.stats{gap:6px}}
+/* comparison table -> cards on phones */
+@media screen and (max-width:640px){
+ #tbl.scroll{overflow:visible}
+ #tbl table,#tbl tbody{display:block;min-width:0;width:100%}
+ #tbl thead{display:none}
+ #tbl tr{display:grid;grid-template-columns:1fr 1fr 1fr;grid-template-areas:"g d m" "b b b" "w w w" "c j j";gap:6px 10px;border:1px solid var(--line);border-radius:10px;padding:10px;margin-bottom:8px;background:var(--bg)}
+ #tbl td{padding:0;border:0;min-width:0}
+ #tbl td:nth-child(1){grid-area:g;font-size:14px}
+ #tbl td:nth-child(2){grid-area:d;color:var(--mut);font-size:13px;align-self:center}
+ #tbl td:nth-child(3){grid-area:b}
+ #tbl td:nth-child(4){grid-area:w}
+ #tbl td:nth-child(5){grid-area:m;text-align:right;font-weight:700}
+ #tbl td:nth-child(6){grid-area:c}
+ #tbl td:nth-child(7){grid-area:j}
+ #tbl td:nth-child(n+3)::before{content:attr(data-label);display:block;font-size:10px;font-weight:400;text-transform:uppercase;letter-spacing:.04em;color:var(--mut);margin-bottom:2px}
+ #tbl td:nth-child(5)::before{text-align:right}
+ #tbl td .b{width:30px;height:30px;font-size:12px}
+ #tbl td .balls{gap:4px;flex-wrap:wrap}
+}
 @media print{
  :root,:root[data-theme]{--bg:#fff!important;--card:#fff!important;--ink:#000!important;--mut:#444!important;--line:#ccc!important;--ball:#e4e6e8!important}
  main>*:not(#tcard){display:none!important}
@@ -690,7 +709,7 @@ function renderFavs(){const l=S.favs.filter(f=>f.g===cur);
   ||'<div class="meta">No favorites yet. Tap ☆ on any bet, or “＋ New favorite”, to keep combinations you play often.</div>'}
 function tableRows(){return S.bets.filter(b=>(F.tg==='all'||b.g===F.tg)&&passBet(b)).sort((a,b)=>b.d.localeCompare(a.d)||b.id-a.id).map(b=>({b,...info(b)}))}
 function renderTable(){const sel=$('ft');sel.innerHTML='<option value="all">All games</option>'+Object.keys(G).map(g=>`<option value="${g}"${F.tg===g?' selected':''}>${g}</option>`).join('');sel.value=F.tg;
- const rows=tableRows().map(({b,w,hit})=>`<tr><td><b>${b.g}</b></td><td>${fmt(b.d)}</td><td>${balls(b.n,hit)}</td><td>${w?balls(w.n,hit):'<span class="meta">Not yet entered</span>'}</td><td>${w?hit.length+' / 6':'—'}</td><td>${peso(b.c)}</td><td>${w&&w.j?peso(w.j):'—'}</td></tr>`).join('');
+ const rows=tableRows().map(({b,w,hit})=>`<tr><td data-label="Game"><b>${b.g}</b></td><td data-label="Draw date">${fmt(b.d)}</td><td data-label="My bet">${balls(b.n,hit)}</td><td data-label="Winning combo">${w?balls(w.n,hit):'<span class="meta">Not yet entered</span>'}</td><td data-label="Matches">${w?hit.length+' / 6':'—'}</td><td data-label="Cost">${peso(b.c)}</td><td data-label="Jackpot">${w&&w.j?peso(w.j):'—'}</td></tr>`).join('');
  $('tbl').innerHTML=rows?`<table><thead><tr><th>Game</th><th>Draw date</th><th>My bet</th><th>Winning combo</th><th>Matches</th><th>Cost</th><th>Jackpot</th></tr></thead><tbody>${rows}</tbody></table>`:'<div class="meta">Nothing to show with the current filters.</div>'}
 function renderStatsDetail(){const bets=S.bets.filter(b=>b.g===cur);
  if(!bets.length){$('sbody').innerHTML='<div class="meta">Add some bets to see stats.</div>';return}
