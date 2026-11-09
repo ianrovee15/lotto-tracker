@@ -109,6 +109,20 @@ dialog::backdrop{background:rgba(0,0,0,.55)}
 .gap-card.overdue{border-color:var(--orange);background:rgba(245,132,38,0.1)}
 .gap-card b{display:block;font-size:14px;margin-bottom:2px}
 .gap-card span{display:block;font-size:10px;color:var(--mut)}
+/* draw analysis */
+.why{grid-column:1/-1;order:4}
+.why>summary{font-size:12px;color:var(--mut);cursor:pointer;padding:4px 0}
+.whyb{display:grid;gap:8px;padding:4px 0 6px}
+.whys{font-size:13px;font-weight:600}
+.whyg{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:6px}
+.whc{border:1px solid var(--line);border-left:4px solid #43a047;border-radius:8px;padding:6px 8px;font-size:12px;line-height:1.35}
+.whc.w{border-left-color:#f9a825}
+.whc b{display:block;font-size:10px;font-weight:600;color:var(--mut);text-transform:uppercase;letter-spacing:.04em}
+.whyh{display:grid;gap:6px;font-size:12px;line-height:1.5}
+.whyh .b{cursor:default}
+.whyh .b:active{transform:none}
+.b.rep{outline:2px solid var(--ink);outline-offset:1px}
+.whn{font-size:11px;color:var(--mut)}
 /* ---------- mobile friendly ---------- */
 html{-webkit-text-size-adjust:100%}
 button,.tab,.chip,.s,.ib,.b,summary{touch-action:manipulation;-webkit-tap-highlight-color:transparent}
@@ -701,8 +715,41 @@ function renderBets(){const all=S.bets.filter(b=>b.g===cur).sort((a,b)=>b.d.loca
   if(i.w)tag=i.k>=3?`<span class="tag win">${i.k===6?'🏆 JACKPOT':i.k+' of 6 — prize!'}</span>`:`<span class="tag">${i.k} of 6</span>`;
   return`<div class="row"><div class="c1">${fmt(b.d)}</div>${balls(b.n,i.hit)}<div class="c3"><div class="l1"><span class="amt">Cost ${peso(b.c)}</span>${tag}</div><div class="acts"><button class="ib" title="Edit" onclick="openBet({id:${b.id},g:'${b.g}',d:'${b.d}',text:'${dash(b.n)}',c:${b.c}})">✎</button><button class="ib" title="Repeat for next draw" onclick="repBet(${b.id})">↻</button><button class="ib" title="Save as favorite" onclick="openFav({g:'${b.g}',text:'${dash(b.n)}'})">☆</button><button class="ib" title="Delete" onclick="delBet(${b.id})">×</button></div></div></div>`}).join('')
   ||`<div class="meta">${all.length?'No bets match these filters.':'No bets yet for this game. Tap “＋ Add bets”.'}</div>`}
+/* ---------- draw analysis ("Why this combo?") ---------- */
+const whyOpen=new Set();
+function whyToggle(el,id){if(el.open){whyOpen.add(id);fillWhy(el,id)}else whyOpen.delete(id)}
+function fillWhy(el,id){const x=S.draws.find(d=>d.id===id),t=el.querySelector('.whyb');if(x&&t)t.innerHTML=whyHTML(x)}
+function whyHTML(x){
+ const g=x.g,m=G[g].max,n=x.n.slice().sort((a,b)=>a-b),hist=getDrawHistoryBefore(g,x.d);
+ const sum=n.reduce((a,b)=>a+b,0),lo=G[g].minSum,hi=G[g].maxSum,sumOk=sum>=lo&&sum<=hi;
+ const odd=n.filter(v=>v%2).length,oeOk=odd>=2&&odd<=4;
+ const half=Math.floor(m/2),low=n.filter(v=>v<=half).length,lhOk=low>=2&&low<=4;
+ const pairs=[];for(let i=0;i<5;i++)if(n[i+1]===n[i]+1)pairs.push(pad(n[i])+'–'+pad(n[i+1]));
+ const cOk=pairs.length<=1,score=[sumOk,oeOk,lhOk,cOk].filter(Boolean).length;
+ const odd2=[];if(!sumOk)odd2.push('sum '+(sum<lo?'below':'above')+' the golden range');if(!oeOk)odd2.push('lopsided odd/even');if(!lhOk)odd2.push('lopsided low/high');if(!cOk)odd2.push('several consecutive pairs');
+ const verdict=score===4?'✅ A textbook draw: every pattern landed in its usual zone.':`${score===3?'🟡':'🟠'} ${score} of 4 usual patterns. Unusual: ${odd2.join(', ')}.`;
+ const chip=(ok,t,v,note)=>`<div class="whc ${ok?'':'w'}"><b>${t}</b>${v}${note?`<br><span class="meta">${note}</span>`:''}</div>`;
+ const chips=chip(sumOk,'Golden sum',`Σ ${sum}`,sumOk?`inside the ${lo}–${hi} range`:`${sum<lo?'below':'above'} the ${lo}–${hi} range`)
+  +chip(oeOk,'Odd / even',`${odd} odd · ${6-odd} even`,oeOk?'balanced':'lopsided')
+  +chip(lhOk,'Low / high',`${low} low · ${6-low} high`,`split at ${half}/${half+1}${lhOk?', balanced':', lopsided'}`)
+  +chip(cOk,'Consecutive',pairs.length?pairs.join(', '):'None',pairs.length>1?'more than usual':'');
+ let balls2,hl;
+ if(hist.length>=5){
+  const gaps=calculateAbsenceGaps(g,x.d),last=hist.slice(-10),prev=hist[hist.length-1].n,hot=[],cold=[],rep=[];
+  balls2=n.map((v,i)=>{const c=last.filter(d=>d.n.includes(v)).length,gp=gaps[v],isRep=prev.includes(v);
+   const isHot=c>=3,isCold=!isHot&&(gp.currentGap>gp.avgGap*2||(gp.currentGap>=hist.length&&hist.length>=10));
+   if(isHot)hot.push(pad(v));else if(isCold)cold.push(pad(v));if(isRep)rep.push(pad(v));
+   return(i?'<span class="sep">-</span>':'')+`<span class="b ${isHot?'hot':isCold?'cold':''} ${isRep?'rep':''}">${pad(v)}</span>`}).join('');
+  hl=`<div>🔴 <b>${hot.length} hot</b>${hot.length?': '+hot.join(', '):''} <span class="meta">(drawn 3+ times in the last ${last.length} draws)</span></div>`
+   +`<div>🔵 <b>${cold.length} cold</b>${cold.length?': '+cold.join(', '):''} <span class="meta">(missing for over 2× its usual gap)</span></div>`
+   +`<div>⭕ <b>${rep.length} repeat${rep.length===1?'':'s'}</b>${rep.length?': '+rep.join(', '):''} <span class="meta">(also drawn in the previous result)</span></div>`;
+ }else{
+  balls2=n.map((v,i)=>(i?'<span class="sep">-</span>':'')+`<span class="b">${pad(v)}</span>`).join('');
+  hl=`<div class="meta">Hot/cold needs at least 5 earlier results for ${g}. You have ${hist.length} so far.</div>`;
+ }
+ return`<div class="whys">${verdict}</div><div class="whyg">${chips}</div><div class="whyh"><div class="balls">${balls2}</div>${hl}</div><div class="whn">Golden range = the sum band most ${g} draws land in. Hot/cold is based on the results you've entered.</div>`}
 function renderDraws(){const list=S.draws.filter(x=>x.g===cur&&passDraw(x)).sort((a,b)=>b.d.localeCompare(a.d));
- $('draws').innerHTML=list.map(x=>`<div class="row"><div class="c1">${fmt(x.d)}</div>${balls(x.n)}<div class="c3"><div class="l1"><span class="amt">Jackpot ${x.j?peso(x.j):'—'}</span></div><div class="acts"><button class="ib" title="Edit" onclick="openRes({id:${x.id},g:'${x.g}',d:'${x.d}'})">✎</button><button class="ib" title="Delete" onclick="delDraw(${x.id})">×</button></div></div></div>`).join('')
+ $('draws').innerHTML=list.map(x=>`<div class="row"><div class="c1">${fmt(x.d)}</div>${balls(x.n)}<div class="c3"><div class="l1"><span class="amt">Jackpot ${x.j?peso(x.j):'—'}</span></div><div class="acts"><button class="ib" title="Edit" onclick="openRes({id:${x.id},g:'${x.g}',d:'${x.d}'})">✎</button><button class="ib" title="Delete" onclick="delDraw(${x.id})">×</button></div></div>${(()=>{const sm=x.n.reduce((a,b)=>a+b,0),ok=sm>=G[x.g].minSum&&sm<=G[x.g].maxSum;return`<details class="why" ${whyOpen.has(x.id)?'open':''} ontoggle="whyToggle(this,${x.id})"><summary>🔍 Why this combo? · Σ ${sm} ${ok?'✓ golden':'⚠ outside golden'}</summary><div class="whyb">${whyOpen.has(x.id)?whyHTML(x):''}</div></details>`})()}</div>`).join('')
   ||'<div class="meta">No results to show. Tap “＋ Add result”.</div>'}
 function renderFavs(){const l=S.favs.filter(f=>f.g===cur);
  $('favs').innerHTML=l.map(f=>`<div class="row"><div class="c1">${esc(f.name||'—')}</div>${balls(f.n)}<div class="c3"><div class="acts"><button class="s" onclick="fillBet('${f.g}','${dash(f.n)}')">Add as bet</button><button class="ib" title="Edit" onclick="openFav({id:${f.id}})">✎</button><button class="ib" title="Delete" onclick="delFav(${f.id})">×</button></div></div></div>`).join('')
