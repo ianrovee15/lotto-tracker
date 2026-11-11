@@ -38,6 +38,7 @@ h2{font-size:15px;margin:0}
 button{font-family:inherit}
 .p2,.p3{border:0;border-radius:10px;padding:11px 18px;font-weight:700;font-size:14px;cursor:pointer}
 .p2{background:var(--blue);color:#fff}.p3{background:var(--orange);color:#000}
+.p2:disabled{opacity:.5;cursor:not-allowed}
 .s{border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:8px;padding:6px 10px;cursor:pointer;font-size:13px}
 .ib{border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:8px;width:30px;height:28px;cursor:pointer;font-size:13px;padding:0;display:inline-grid;place-items:center}
 .ib:hover,.chip:hover,.s:hover{border-color:var(--orange)}
@@ -123,6 +124,13 @@ dialog::backdrop{background:rgba(0,0,0,.55)}
 .whyh .b:active{transform:none}
 .b.rep{outline:2px solid var(--ink);outline-offset:1px}
 .whn{font-size:11px;color:var(--mut)}
+/* history import */
+.imp table{min-width:0}
+.imp details{margin-top:8px;font-size:12px}
+.imp details summary{cursor:pointer;color:var(--err)}
+.imp ul{margin:6px 0;padding-left:18px;color:var(--mut)}
+.chk{display:flex!important;align-items:center;gap:8px;color:var(--ink)!important;font-size:13px!important;margin-top:12px!important}
+.chk input{width:auto!important;min-height:0!important}
 /* ---------- mobile friendly ---------- */
 html{-webkit-text-size-adjust:100%}
 button,.tab,.chip,.s,.ib,.b,summary{touch-action:manipulation;-webkit-tap-highlight-color:transparent}
@@ -216,6 +224,7 @@ body.locked main{display:none}
     <button class="s" onclick="exportData()" title="Download backup file">💾 Backup</button>
     <label class="s" title="Load backup file"><input type="file" accept=".json" hidden onchange="importData(event)">⬆ Restore</label>
     <button class="s" onclick="openRecover()" title="Restore automatic earlier copy">⟲ Recover</button>
+    <button class="s" onclick="openImportHist()" title="Import past winning numbers from a spreadsheet">📥 Import history</button>
     <button class="s" onclick="openSimModal()" title="Backtest strategies against draw history">🧪 Backtest</button>
     <button class="s" onclick="openMatrixModal()" title="Number pair heatmap matrix">🔥 Heatmap</button>
     <button class="s" onclick="openGapModal()" title="View draw absence gaps">⏳ Absence Gaps</button>
@@ -245,6 +254,7 @@ body.locked main{display:none}
       <button class="chip" type="button" onclick="mLucky('i')">🎲 Random</button>
       <button class="chip go" type="button" onclick="openWheelModal()">⚙️ System Bet / Wheel</button>
     </div>
+    <div class="meta" id="ihist" style="margin-top:4px"></div>
     
     <div id="isynergy"></div>
     <div id="if"></div>
@@ -266,7 +276,7 @@ body.locked main{display:none}
 </div>
 
 <details class="card"><summary><span id="bt">My bets</span> <span class="meta" id="bcount" style="font-weight:400;margin-left:8px"></span></summary><div id="bets"></div></details>
-<details class="card"><summary id="dt">Draw results</summary><div id="draws"></div></details>
+<details class="card"><summary><span id="dt">Draw results</span> <span class="meta" id="dcount" style="font-weight:400;margin-left:8px"></span></summary><div id="draws"></div></details>
 <div class="card"><div class="ch"><h2 id="ft2">⭐ Favorite combinations</h2><button class="s" onclick="openFav()">＋ New favorite</button></div><div id="favs"></div></div>
 <details class="card"><summary id="st">📊 Stats</summary><div id="sbody"></div></details>
 
@@ -279,7 +289,7 @@ body.locked main{display:none}
   <div class="scroll" id="tbl"></div>
 </div>
 
-<p class="meta">Data is saved in this browser only. Use 💾 Backup (top right) now and then to keep a safe copy. Results must be typed in from the official PCSO draw.</p>
+<p class="meta">Data is saved in this browser only. Use 💾 Backup (top right) now and then to keep a safe copy. Results must be typed in from the official PCSO draw, or imported with 📥 Import history.</p>
 </main>
 <dialog id="dlg"></dialog>
 <div class="toast" id="toast"></div>
@@ -322,7 +332,8 @@ function getCombinations(arr, k) {
 }
 
 /* ---------- data ---------- */
-let uc=0;const uid=()=>Date.now()*1000+(++uc%1000);
+// strictly increasing ids, so bulk adds (imports, big wheels) never get duplicate ids
+let lastId=0;const uid=()=>{let v=Date.now()*1000;if(v<=lastId)v=lastId+1;return lastId=v};
 function norm(d){const a=x=>Array.isArray(x)?x:[];const o={bets:a(d.bets),draws:a(d.draws),favs:a(d.favs)};
  o.bets.forEach(b=>{if(!b.id)b.id=uid();b.n=(b.n||[]).map(Number)});
  o.draws.forEach(x=>{if(!x.id)x.id=uid();x.n=(x.n||[]).map(Number)});
@@ -411,6 +422,14 @@ function generateSmartPickAdvanced(gameKey, strategy = 'hybrid', beforeDate = nu
   history.slice(-15).forEach(d => {
     d.n.forEach(n => { if (freq[n]) freq[n] += 4; });
   });
+  // Long-term frequency: once there's a decent history (e.g. imported), blend in
+  // how often each number has come up over the whole record, relative to expected.
+  if (history.length >= 30) {
+    const cnt = {};
+    history.forEach(d => d.n.forEach(n => { cnt[n] = (cnt[n] || 0) + 1; }));
+    const expected = history.length * 6 / max;
+    for (let i = 1; i <= max; i++) freq[i] += Math.round(3 * (cnt[i] || 0) / expected);
+  }
 
   const pool = [];
   for (let num = 1; num <= max; num++) {
@@ -668,6 +687,140 @@ function addNumToBet(num) {
   toast(`Appended ${pad(num)} to bet box`);
 }
 
+/* ---------- FEATURE 6: IMPORT DRAW HISTORY FROM SPREADSHEET ---------- */
+// SheetJS is only loaded when you open the import, so normal page loads stay light.
+const XLSX_SRC='https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js';
+let xlsxP=null,impSheets=null,impPlan=null,impFile='';
+function loadXLSX(){
+  if(window.XLSX)return Promise.resolve(window.XLSX);
+  if(!xlsxP)xlsxP=new Promise((res,rej)=>{const s=document.createElement('script');s.src=XLSX_SRC;
+    s.onload=()=>res(window.XLSX);s.onerror=()=>{xlsxP=null;s.remove();rej(new Error('load'))};document.head.appendChild(s)});
+  return xlsxP}
+
+function openImportHist(){
+  impSheets=null;impPlan=null;impFile='';
+  shell('📥 Import draw history',`<div class="imp">
+    <div class="meta">Upload an Excel or CSV file of past winning numbers (e.g. copied from the PCSO results page). Each row needs a <b>draw date</b> and <b>6 numbers</b> — either in one cell like <b>05-12-18-27-33-41</b> or in six separate columns. A Game column and a Jackpot column are picked up if present.</div>
+    <label>Game</label>
+    <select id="hg" onchange="impPreview()"><option value="auto">Auto-detect from a Game column (otherwise ${cur})</option>${gopts('')}</select>
+    <label>File (.xlsx, .xls, .csv)</label>
+    <input type="file" id="hf" accept=".xlsx,.xls,.xlsm,.xlsb,.ods,.csv,.txt" onchange="impRead(event)">
+    <label class="chk"><input type="checkbox" id="ho" onchange="impPreview()"> Overwrite results I already have if the file has different numbers</label>
+    <div style="margin-top:8px"><button class="chip" type="button" onclick="impTemplate()">⬇ Download a blank template</button></div>
+    <div id="hp" style="margin-top:8px"></div></div>`,
+  `${cancelBtn}<button class="p2" id="hb" disabled onclick="impApply()">Import</button>`)}
+
+function impTemplate(){
+  download('lotto-history-template.csv','\ufeff'+['Game,Draw Date,Combination,Jackpot','Lotto 6/42,2026-11-10,05-12-18-27-33-41,5000000','Ultra Lotto 6/58,2026-11-08,02-14-23-31-47-55,49500000'].join('\r\n'),'text/csv')}
+
+function impRead(e){
+  const f=e.target.files[0];if(!f)return;impFile=f.name;
+  $('hp').innerHTML='<div class="meta">Reading file…</div>';$('hb').disabled=true;
+  const isText=/\.(csv|txt)$/i.test(f.name);
+  loadXLSX().then(X=>new Promise((res,rej)=>{
+    const r=new FileReader();
+    r.onload=()=>{try{
+      // raw:true keeps CSV text as-is, so "05-12-18-27-33-41" is never mistaken for a date
+      const wb=isText?X.read(r.result,{type:'string',raw:true}):X.read(new Uint8Array(r.result),{type:'array'});
+      res(wb.SheetNames.map(sn=>({sn,a:X.utils.sheet_to_json(wb.Sheets[sn],{header:1,raw:true,defval:''})})))
+    }catch(x){rej(x)}};
+    r.onerror=()=>rej(r.error);
+    isText?r.readAsText(f):r.readAsArrayBuffer(f)}))
+  .then(sh=>{impSheets=sh;impPreview()})
+  .catch(()=>{$('hp').innerHTML='<div class="err">Could not read that file. Check it’s an Excel or CSV file. (The first import also needs an internet connection to load the spreadsheet reader.)</div>'})}
+
+const IH={num:/^\s*(?:n|no|num|number|ball|#)?\s*\.?\s*([1-6])(?:st|nd|rd|th)?\s*$/i,date:/date/i,jack:/jackpot|prize/i,game:/game/i,combo:/combin|winning|result|combo|numbers?\s*$/i};
+function impHeader(row){const m={nums:[]};
+  row.forEach((c,i)=>{const t=String(c).trim();if(!t)return;
+    if(IH.num.test(t))m.nums.push(i);
+    else if(m.date==null&&IH.date.test(t))m.date=i;
+    else if(m.jack==null&&IH.jack.test(t))m.jack=i;
+    else if(m.game==null&&IH.game.test(t))m.game=i;
+    else if(m.combo==null&&IH.combo.test(t))m.combo=i});
+  return m.date!=null&&(m.combo!=null||m.nums.length>=6)?m:null}
+
+const impYMD=(y,mo,d)=>{if(y<100)y+=2000;const dt=new Date(y,mo-1,d);return dt.getFullYear()===y&&dt.getMonth()===mo-1&&dt.getDate()===d&&y>1990&&y<2100?iso(dt):null};
+function impDate(v){
+  if(v==null||v==='')return null;
+  if(typeof v==='number'){if(v<20000||v>80000)return null;const p=XLSX.SSF.parse_date_code(v);return p?impYMD(p.y,p.m,p.d):null}
+  if(v instanceof Date)return isNaN(v)?null:iso(v);
+  const s=String(v).trim();let m;
+  if(m=s.match(/^(\d{4})[-\/.](\d{1,2})[-\/.](\d{1,2})(?:\D|$)/))return impYMD(+m[1],+m[2],+m[3]);
+  if(m=s.match(/^(\d{1,2})[-\/.](\d{1,2})[-\/.](\d{2,4})(?:\s|$)/)){const a=+m[1],b=+m[2],y=+m[3];return a>12?impYMD(y,b,a):impYMD(y,a,b)} // PCSO uses month/day/year
+  if(/\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)/i.test(s)){const t=Date.parse(s.replace(/(\d)(st|nd|rd|th)\b/gi,'$1'));return isNaN(t)?null:iso(new Date(t))}
+  return null}
+
+function impGame(t){t=String(t||'').toLowerCase().trim();if(!t)return null;
+  if(/\b[2-6]\s*d\b|swertres|ez2|digit|stl|pares/.test(t))return'x'; // other PCSO games
+  if(/6\s*\/\s*58|ultra/.test(t))return'6/58';
+  if(/6\s*\/\s*55|grand/.test(t))return'6/55';
+  if(/6\s*\/\s*49|super/.test(t))return'6/49';
+  if(/6\s*\/\s*45|mega/.test(t))return'6/45';
+  if(/6\s*\/\s*42|lotto/.test(t))return'6/42';
+  return null}
+
+const digits=v=>(String(v).match(/\d+/g)||[]);
+function impNums(row,m){
+  if(m&&m.nums.length>=6)return m.nums.slice(0,6).map(i=>digits(row[i]).join('')).join('-');
+  if(m&&m.combo!=null)return digits(row[m.combo]).join('-');
+  // no header row: find a cell holding 6 small numbers, or 6 cells of 1–2 digits
+  for(const c of row){const d=digits(c);if(typeof c==='string'&&d.length===6&&d.every(x=>+x<=58))return d.join('-')}
+  const ints=row.filter(c=>/^\s*\d{1,2}\s*$/.test(String(c)));
+  return ints.length>=6?ints.slice(0,6).map(c=>String(c).trim()).join('-'):''}
+
+function impBuild(){
+  const sel=$('hg').value,out=[],errs=[],seen=new Set();let skip=0,dupF=0;
+  impSheets.forEach(({sn,a})=>{
+    let m=null,start=0;
+    for(let i=0;i<Math.min(15,a.length);i++){const h=impHeader(a[i]);if(h){m=h;start=i+1;break}}
+    const sg=impGame(sn);
+    for(let r=start;r<a.length;r++){
+      const row=a[r];if(!row||row.every(c=>String(c).trim()===''))continue;
+      const where=(impSheets.length>1?sn+' · ':'')+'row '+(r+1);
+      const rg=m&&m.game!=null?impGame(row[m.game]):null;
+      const g=sel==='auto'?(rg||sg||cur):sel;
+      if(g==='x'||(rg&&rg!==g)){skip++;continue}
+      const d=m?impDate(row[m.date]):(row.map(impDate).find(Boolean)||null);
+      if(!d){errs.push(where+': no valid draw date');continue}
+      const n=parse(impNums(row,m),g);
+      if(typeof n==='string'){errs.push(where+' ('+d+'): '+n);continue}
+      const k=g+'|'+d;if(seen.has(k)){dupF++;continue}seen.add(k);
+      const j=m&&m.jack!=null?Math.round(+String(row[m.jack]).replace(/[^\d.]/g,'')||0):0;
+      out.push({g,d,n,j})}});
+  return{out,errs,skip,dupF}}
+
+function impPreview(){
+  if(!impSheets)return;
+  const{out,errs,skip,dupF}=impBuild(),ow=$('ho').checked;
+  const idx=new Map(S.draws.map(x=>[x.g+'|'+x.d,x])),per={},plan=[];let add=0,upd=0,diffSkipped=0;
+  out.forEach(x=>{const ex=idx.get(x.g+'|'+x.d),p=per[x.g]||(per[x.g]={n:0,same:0,diff:0,lo:x.d,hi:x.d});
+    if(x.d<p.lo)p.lo=x.d;if(x.d>p.hi)p.hi=x.d;
+    if(!ex){p.n++;add++;plan.push(x)}
+    else if(dash(ex.n)===dash(x.n)){p.same++;if(x.j&&!ex.j){upd++;plan.push(x)}} // fill in a missing jackpot
+    else{p.diff++;if(ow){upd++;plan.push(x)}else diffSkipped++}});
+  impPlan=plan;
+  const games=Object.keys(per).sort();
+  let h=`<div class="meta"><b>${esc(impFile)}</b> · ${out.length.toLocaleString()} valid result${out.length===1?'':'s'} found</div>`;
+  if(games.length)h+=`<div class="scroll"><table><thead><tr><th>Game</th><th>Dates</th><th>New</th><th>Have</th><th>Differ</th></tr></thead><tbody>${games.map(g=>{const p=per[g];return`<tr><td><b>${g}</b></td><td>${fmtS(p.lo)} ${p.lo.slice(0,4)} – ${fmtS(p.hi)} ${p.hi.slice(0,4)}</td><td>${p.n}</td><td>${p.same}</td><td>${p.diff}</td></tr>`}).join('')}</tbody></table></div>`;
+  const notes=[];
+  if(diffSkipped)notes.push(`${diffSkipped} result${diffSkipped>1?'s':''} differ from what you already have and will be left alone. Tick “Overwrite” to replace them.`);
+  if(skip)notes.push(`${skip} row${skip>1?'s':''} from other games skipped.`);
+  if(dupF)notes.push(`${dupF} duplicate row${dupF>1?'s':''} in the file ignored.`);
+  if(notes.length)h+=`<div class="warn-box">${notes.join('<br>')}</div>`;
+  if(errs.length)h+=`<details><summary>${errs.length} row${errs.length>1?'s':''} couldn’t be read</summary><ul>${errs.slice(0,25).map(e=>`<li>${esc(e)}</li>`).join('')}${errs.length>25?`<li>…and ${errs.length-25} more</li>`:''}</ul></details>`;
+  if(!out.length&&!errs.length&&!skip)h+='<div class="err">No results found. Make sure the sheet has a date column and the 6 winning numbers.</div>';
+  $('hp').innerHTML=h;
+  const b=$('hb');b.disabled=!plan.length;
+  b.textContent=plan.length?`Import ${add.toLocaleString()} new${upd?` + update ${upd}`:''}`:'Nothing new to import'}
+
+function impApply(){
+  if(!impPlan||!impPlan.length)return;const plan=impPlan;dlg.close();
+  mutate(()=>{const idx=new Map(S.draws.map(x=>[x.g+'|'+x.d,x]));
+    plan.forEach(x=>{const ex=idx.get(x.g+'|'+x.d);
+      if(ex){ex.n=x.n;if(x.j)ex.j=x.j}
+      else{const nd={id:uid(),g:x.g,d:x.d,n:x.n,j:x.j};S.draws.push(nd);idx.set(x.g+'|'+x.d,nd)}})},
+  `Imported ${plan.length.toLocaleString()} result${plan.length>1?'s':''}`)}
+
 /* ---------- filters ---------- */
 function range(){const t=new Date(),y=t.getFullYear(),m=t.getMonth(),f=(a,b,c)=>iso(new Date(a,b,c));
  switch(F.period){case'month':return[f(y,m,1),f(y,m+1,0)];case'last':return[f(y,m-1,1),f(y,m,0)];case'30':return[addDays(todayS(),-30),'9999'];case'year':return[f(y,0,1),f(y,11,31)];default:return['0000','9999']}}
@@ -686,12 +839,14 @@ function renderInline(){if(inG!==cur){inG=cur;$('id').value=nextDraw(cur);$('xd'
  $('ibt').textContent='Add bets · '+cur;$('xbt').textContent='Add result · '+cur;
  const note=d=>'Draws '+dayList(cur)+(d&&!drawDay(cur,d)?' — ⚠ not a draw day for '+cur:'');
  $('in').textContent=note($('id').value);$('xn').textContent=note($('xd').value);
+ const hn=S.draws.filter(x=>x.g===cur).length;
+ $('ihist').textContent=hn?`🧠 Smart Pick is using ${hn.toLocaleString()} past ${cur} result${hn===1?'':'s'}${hn<30?' — import more with 📥 Import history':''}`:'🧠 No history yet — use 📥 Import history to load past results for Smart Pick';
  const l=S.favs.filter(f=>f.g===cur);
  $('if').innerHTML=l.length?'<div class="meta" style="margin-top:6px">Favorites — tap to add:</div>'+l.map(f=>`<button class="chip" type="button" onclick="mAdd(${f.id},'i')">⭐ ${esc(f.name||dash(f.n))}</button>`).join(''):''}
 function fillBet(g,text){cur=g;render();mAppend(text,'i');$('it').focus();$('it').scrollIntoView({behavior:'smooth',block:'center'})}
 function fillRes(g,d){cur=g;render();$('xd').value=d;renderInline();const ex=findDraw(g,d);$('xt').value=ex?dash(ex.n):'';$('xj').value=ex&&ex.j?ex.j:'';$('xt').focus();$('xt').scrollIntoView({behavior:'smooth',block:'center'})}
 function lists(){renderBets();renderDraws();renderTable()}
-function goTab(g){cur=g;render()}
+function goTab(g){cur=g;drawLimit=50;render()}
 function renderTabs(){$('tabs').innerHTML=Object.keys(G).map(g=>`<button class="tab ${g===cur?'on':''}" onclick="goTab('${g}')">${g}</button>`).join('');
  $('info').textContent=`${G[cur].n} · draws ${dayList(cur)} · next draw: ${fmt(nextDraw(cur))}`;
  ['bt','dt','ft2','st'].forEach((id,i)=>$(id).textContent=['My bets · ','Draw results · ','⭐ Favorite combinations · ','📊 Stats · '][i]+cur)}
@@ -748,9 +903,13 @@ function whyHTML(x){
   hl=`<div class="meta">Hot/cold needs at least 5 earlier results for ${g}. You have ${hist.length} so far.</div>`;
  }
  return`<div class="whys">${verdict}</div><div class="whyg">${chips}</div><div class="whyh"><div class="balls">${balls2}</div>${hl}</div><div class="whn">Golden range = the sum band most ${g} draws land in. Hot/cold is based on the results you've entered.</div>`}
-function renderDraws(){const list=S.draws.filter(x=>x.g===cur&&passDraw(x)).sort((a,b)=>b.d.localeCompare(a.d));
- $('draws').innerHTML=list.map(x=>`<div class="row"><div class="c1">${fmt(x.d)}</div>${balls(x.n)}<div class="c3"><div class="l1"><span class="amt">Jackpot ${x.j?peso(x.j):'—'}</span></div><div class="acts"><button class="ib" title="Edit" onclick="openRes({id:${x.id},g:'${x.g}',d:'${x.d}'})">✎</button><button class="ib" title="Delete" onclick="delDraw(${x.id})">×</button></div></div>${(()=>{const sm=x.n.reduce((a,b)=>a+b,0),ok=sm>=G[x.g].minSum&&sm<=G[x.g].maxSum;return`<details class="why" ${whyOpen.has(x.id)?'open':''} ontoggle="whyToggle(this,${x.id})"><summary>🔍 Why this combo? · Σ ${sm} ${ok?'✓ golden':'⚠ outside golden'}</summary><div class="whyb">${whyOpen.has(x.id)?whyHTML(x):''}</div></details>`})()}</div>`).join('')
-  ||'<div class="meta">No results to show. Tap “＋ Add result”.</div>'}
+// imported history can be thousands of rows, so the list shows the newest first in pages
+let drawLimit=50;
+function renderDraws(){const all=S.draws.filter(x=>x.g===cur&&passDraw(x)).sort((a,b)=>b.d.localeCompare(a.d)),list=all.slice(0,drawLimit);
+ const tot=S.draws.filter(x=>x.g===cur).length;$('dcount').textContent=tot?`${tot.toLocaleString()} total`:'';
+ $('draws').innerHTML=(list.map(x=>`<div class="row"><div class="c1">${fmt(x.d)}</div>${balls(x.n)}<div class="c3"><div class="l1"><span class="amt">Jackpot ${x.j?peso(x.j):'—'}</span></div><div class="acts"><button class="ib" title="Edit" onclick="openRes({id:${x.id},g:'${x.g}',d:'${x.d}'})">✎</button><button class="ib" title="Delete" onclick="delDraw(${x.id})">×</button></div></div>${(()=>{const sm=x.n.reduce((a,b)=>a+b,0),ok=sm>=G[x.g].minSum&&sm<=G[x.g].maxSum;return`<details class="why" ${whyOpen.has(x.id)?'open':''} ontoggle="whyToggle(this,${x.id})"><summary>🔍 Why this combo? · Σ ${sm} ${ok?'✓ golden':'⚠ outside golden'}</summary><div class="whyb">${whyOpen.has(x.id)?whyHTML(x):''}</div></details>`})()}</div>`).join('')
+  +(all.length>drawLimit?`<div style="text-align:center;margin-top:10px"><button class="s" onclick="drawLimit+=100;renderDraws()">Show more (${(all.length-drawLimit).toLocaleString()} older)</button></div>`:''))
+  ||'<div class="meta">No results to show. Tap “＋ Add result” or 📥 Import history.</div>'}
 function renderFavs(){const l=S.favs.filter(f=>f.g===cur);
  $('favs').innerHTML=l.map(f=>`<div class="row"><div class="c1">${esc(f.name||'—')}</div>${balls(f.n)}<div class="c3"><div class="acts"><button class="s" onclick="fillBet('${f.g}','${dash(f.n)}')">Add as bet</button><button class="ib" title="Edit" onclick="openFav({id:${f.id}})">✎</button><button class="ib" title="Delete" onclick="delFav(${f.id})">×</button></div></div></div>`).join('')
   ||'<div class="meta">No favorites yet. Tap ☆ on any bet, or “＋ New favorite”, to keep combinations you play often.</div>'}
