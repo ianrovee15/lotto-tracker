@@ -705,11 +705,11 @@ function openImportHist(){
     <select id="hg" onchange="impPreview()"><option value="auto">Auto-detect from a Game column (otherwise ${cur})</option>${gopts('')}</select>
     <label>File (.xlsx, .xls, .csv)</label>
     <input type="file" id="hf" accept=".xlsx,.xls,.xlsm,.xlsb,.ods,.csv,.txt" onchange="impRead(event)">
-    <label>Excel date cells</label>
+    <label>Date cells (from Excel / Google Sheets)</label>
     <select id="hdm" onchange="impPreview()">
-      <option value="auto">Auto: swap day/month when only the swapped date is a draw day</option>
-      <option value="swap">Always swap day/month (Excel converted M/D/Y text using Day/Month settings)</option>
-      <option value="asis">Use exactly as stored in Excel</option>
+      <option value="auto">Auto-detect (recommended)</option>
+      <option value="swap">Always swap day/month</option>
+      <option value="asis">Use exactly as stored in the sheet</option>
     </select>
     <div class="meta">Dates typed as text are always read as Month/Day/Year.</div>
     <label class="chk"><input type="checkbox" id="ho" onchange="impPreview()"> Overwrite results I already have if the file has different numbers</label>
@@ -776,7 +776,8 @@ function impNums(row,m){
   return ints.length>=6?ints.slice(0,6).map(c=>String(c).trim()).join('-'):''}
 
 function impBuild(){
-  const sel=$('hg').value,dm=$('hdm').value,out=[],errs=[],seen=new Set(),offEx=[];let skip=0,dupF=0,swapN=0,offN=0;
+  const sel=$('hg').value,dm=$('hdm').value,out=[],errs=[],seen=new Set(),offEx=[],cand=[],today=todayS();
+  let skip=0,dupF=0,swapN=0,offN=0,txtDates=0;
   impSheets.forEach(({sn,a})=>{
     let m=null,start=0;
     for(let i=0;i<Math.min(15,a.length);i++){const h=impHeader(a[i]);if(h){m=h;start=i+1;break}}
@@ -788,24 +789,38 @@ function impBuild(){
       const g=sel==='auto'?(rg||sg||cur):sel;
       if(g==='x'||(rg&&rg!==g)){skip++;continue}
       const dv=m?row[m.date]:row.find(c=>impDate(c));
-      let d=impDate(dv);
-      if(d&&typeof dv==='number'){
-        // Excel date cell: if Excel turned M/D/Y text into a date using Day/Month settings,
-        // the day and month come out swapped (e.g. PCSO 2/1/2026 = Feb 1 stored as Jan 2)
-        const p=XLSX.SSF.parse_date_code(dv),sw=p.d<=12&&p.d!==p.m?impYMD(p.y,p.d,p.m):null;
-        if(sw&&(dm==='swap'||(dm==='auto'&&!drawDay(g,d)&&drawDay(g,sw)))){d=sw;swapN++}}
+      const d=impDate(dv);
       if(!d){errs.push(where+': no valid draw date (expected Month/Day/Year)');continue}
-      if(!drawDay(g,d)){offN++;if(offEx.length<5)offEx.push(g+' '+fmtS(d)+' '+d.slice(0,4)+' ('+where+')')}
+      let sw=null,serial=typeof dv==='number';
+      if(serial){const p=XLSX.SSF.parse_date_code(dv);sw=p.d<=12&&p.d!==p.m?impYMD(p.y,p.d,p.m):null}else txtDates++;
       const n=parse(impNums(row,m),g);
       if(typeof n==='string'){errs.push(where+' ('+d+'): '+n);continue}
-      const k=g+'|'+d;if(seen.has(k)){dupF++;continue}seen.add(k);
       const j=m&&m.jack!=null?Math.round(+String(row[m.jack]).replace(/[^\d.]/g,'')||0):0;
-      out.push({g,d,n,j})}});
-  return{out,errs,skip,dupF,swapN,offN,offEx}}
+      cand.push({g,d,sw,serial,n,j,where})}});
+
+  // Decide for the whole file whether its date cells were made by a spreadsheet that read
+  // PCSO's Month/Day/Year text with Day/Month settings (Sheets/Excel locale). Signs of that:
+  //  - text dates sitting beside date cells (M/D/Y text with day > 12 can't convert, so it stays text)
+  //  - only the swapped date is a past draw day for that game
+  // Signs against: date cells with day > 12, or only the as-stored date is a past draw day.
+  const ok=(g,d)=>drawDay(g,d)&&d<=today;
+  let sv=0,kv=0;const serials=cand.filter(c=>c.serial);
+  serials.forEach(c=>{if(!c.sw){if(+c.d.slice(8,10)>12)kv+=2;return}
+    const A=ok(c.g,c.d),B=ok(c.g,c.sw);if(A&&!B)kv++;else if(B&&!A)sv++});
+  if(txtDates&&serials.length)sv+=Math.min(txtDates,serials.length);
+  const fileSwap=dm==='swap'||(dm==='auto'&&sv>kv);
+
+  cand.forEach(c=>{
+    let d=c.d;
+    if(c.sw&&(fileSwap||(dm==='auto'&&!ok(c.g,d)&&ok(c.g,c.sw)))){d=c.sw;swapN++}
+    const k=c.g+'|'+d;if(seen.has(k)){dupF++;return}seen.add(k);
+    if(!drawDay(c.g,d)||d>today){offN++;if(offEx.length<5)offEx.push(c.g+' '+fmtS(d)+' '+d.slice(0,4)+' ('+c.where+')')}
+    out.push({g:c.g,d,n:c.n,j:c.j})});
+  return{out,errs,skip,dupF,swapN,offN,offEx,fileSwap:fileSwap&&dm==='auto'&&swapN>0}}
 
 function impPreview(){
   if(!impSheets)return;
-  const{out,errs,skip,dupF,swapN,offN,offEx}=impBuild(),ow=$('ho').checked;
+  const{out,errs,skip,dupF,swapN,offN,offEx,fileSwap}=impBuild(),ow=$('ho').checked;
   const idx=new Map(S.draws.map(x=>[x.g+'|'+x.d,x])),per={},plan=[];let add=0,upd=0,diffSkipped=0;
   out.forEach(x=>{const ex=idx.get(x.g+'|'+x.d),p=per[x.g]||(per[x.g]={n:0,same:0,diff:0,lo:x.d,hi:x.d});
     if(x.d<p.lo)p.lo=x.d;if(x.d>p.hi)p.hi=x.d;
@@ -816,15 +831,15 @@ function impPreview(){
   const fixes=[];
   out.forEach(x=>{const y=+x.d.slice(0,4),mo=+x.d.slice(5,7),dd=+x.d.slice(8,10);if(dd>12||dd===mo)return;
     const sw=impYMD(y,dd,mo),tw=idx.get(x.g+'|'+sw);
-    if(tw&&dash(tw.n)===dash(x.n)&&!drawDay(x.g,sw))fixes.push(tw.id)});
+    if(tw&&dash(tw.n)===dash(x.n))fixes.push(tw.id)});
   impPlan=plan;impFixes=fixes;
   const games=Object.keys(per).sort();
   let h=`<div class="meta"><b>${esc(impFile)}</b> · ${out.length.toLocaleString()} valid result${out.length===1?'':'s'} found</div>`;
   if(games.length)h+=`<div class="scroll"><table><thead><tr><th>Game</th><th>Dates</th><th>New</th><th>Have</th><th>Differ</th></tr></thead><tbody>${games.map(g=>{const p=per[g];return`<tr><td><b>${g}</b></td><td>${fmtS(p.lo)} ${p.lo.slice(0,4)} – ${fmtS(p.hi)} ${p.hi.slice(0,4)}</td><td>${p.n}</td><td>${p.same}</td><td>${p.diff}</td></tr>`}).join('')}</tbody></table></div>`;
   const notes=[];
-  if(swapN)notes.push(`${swapN} Excel date${swapN>1?'s were':' was'} read with day and month swapped back to Month/Day/Year.`);
+  if(swapN)notes.push(fileSwap?`This sheet’s date cells were converted using Day/Month settings, so all ${swapN} of them were swapped back to Month/Day/Year.`:`${swapN} date cell${swapN>1?'s were':' was'} swapped back to Month/Day/Year to match the draw schedule.`);
   if(fixes.length)notes.push(`${fixes.length} result${fixes.length>1?'s':''} saved earlier on the wrong (day/month swapped) date will be removed.`);
-  if(offN)notes.push(`${offN} result${offN>1?'s fall':' falls'} on a day that isn’t a usual draw day — check the dates, e.g. ${offEx.map(esc).join('; ')}.`);
+  if(offN)notes.push(`${offN} result${offN>1?'s fall':' falls'} on a non-draw day or in the future — check the dates, e.g. ${offEx.map(esc).join('; ')}.`);
   if(diffSkipped)notes.push(`${diffSkipped} result${diffSkipped>1?'s':''} differ from what you already have and will be left alone. Tick “Overwrite” to replace them.`);
   if(skip)notes.push(`${skip} row${skip>1?'s':''} from other games skipped.`);
   if(dupF)notes.push(`${dupF} duplicate row${dupF>1?'s':''} in the file ignored.`);
