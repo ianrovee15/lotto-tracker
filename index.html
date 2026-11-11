@@ -690,7 +690,7 @@ function addNumToBet(num) {
 /* ---------- FEATURE 6: IMPORT DRAW HISTORY FROM SPREADSHEET ---------- */
 // SheetJS is only loaded when you open the import, so normal page loads stay light.
 const XLSX_SRC='https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js';
-let xlsxP=null,impSheets=null,impPlan=null,impFile='';
+let xlsxP=null,impSheets=null,impPlan=null,impFixes=[],impFile='';
 function loadXLSX(){
   if(window.XLSX)return Promise.resolve(window.XLSX);
   if(!xlsxP)xlsxP=new Promise((res,rej)=>{const s=document.createElement('script');s.src=XLSX_SRC;
@@ -705,6 +705,13 @@ function openImportHist(){
     <select id="hg" onchange="impPreview()"><option value="auto">Auto-detect from a Game column (otherwise ${cur})</option>${gopts('')}</select>
     <label>File (.xlsx, .xls, .csv)</label>
     <input type="file" id="hf" accept=".xlsx,.xls,.xlsm,.xlsb,.ods,.csv,.txt" onchange="impRead(event)">
+    <label>Excel date cells</label>
+    <select id="hdm" onchange="impPreview()">
+      <option value="auto">Auto: swap day/month when only the swapped date is a draw day</option>
+      <option value="swap">Always swap day/month (Excel converted M/D/Y text using Day/Month settings)</option>
+      <option value="asis">Use exactly as stored in Excel</option>
+    </select>
+    <div class="meta">Dates typed as text are always read as Month/Day/Year.</div>
     <label class="chk"><input type="checkbox" id="ho" onchange="impPreview()"> Overwrite results I already have if the file has different numbers</label>
     <div style="margin-top:8px"><button class="chip" type="button" onclick="impTemplate()">⬇ Download a blank template</button></div>
     <div id="hp" style="margin-top:8px"></div></div>`,
@@ -746,7 +753,7 @@ function impDate(v){
   if(v instanceof Date)return isNaN(v)?null:iso(v);
   const s=String(v).trim();let m;
   if(m=s.match(/^(\d{4})[-\/.](\d{1,2})[-\/.](\d{1,2})(?:\D|$)/))return impYMD(+m[1],+m[2],+m[3]);
-  if(m=s.match(/^(\d{1,2})[-\/.](\d{1,2})[-\/.](\d{2,4})(?:\s|$)/)){const a=+m[1],b=+m[2],y=+m[3];return a>12?impYMD(y,b,a):impYMD(y,a,b)} // PCSO uses month/day/year
+  if(m=s.match(/^(\d{1,2})[-\/.](\d{1,2})[-\/.](\d{2,4})(?:\s|$)/)){const a=+m[1],b=+m[2],y=+m[3];return impYMD(y,a,b)} // strictly Month/Day/Year (PCSO format)
   if(/\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)/i.test(s)){const t=Date.parse(s.replace(/(\d)(st|nd|rd|th)\b/gi,'$1'));return isNaN(t)?null:iso(new Date(t))}
   return null}
 
@@ -769,7 +776,7 @@ function impNums(row,m){
   return ints.length>=6?ints.slice(0,6).map(c=>String(c).trim()).join('-'):''}
 
 function impBuild(){
-  const sel=$('hg').value,out=[],errs=[],seen=new Set();let skip=0,dupF=0;
+  const sel=$('hg').value,dm=$('hdm').value,out=[],errs=[],seen=new Set(),offEx=[];let skip=0,dupF=0,swapN=0,offN=0;
   impSheets.forEach(({sn,a})=>{
     let m=null,start=0;
     for(let i=0;i<Math.min(15,a.length);i++){const h=impHeader(a[i]);if(h){m=h;start=i+1;break}}
@@ -780,29 +787,44 @@ function impBuild(){
       const rg=m&&m.game!=null?impGame(row[m.game]):null;
       const g=sel==='auto'?(rg||sg||cur):sel;
       if(g==='x'||(rg&&rg!==g)){skip++;continue}
-      const d=m?impDate(row[m.date]):(row.map(impDate).find(Boolean)||null);
-      if(!d){errs.push(where+': no valid draw date');continue}
+      const dv=m?row[m.date]:row.find(c=>impDate(c));
+      let d=impDate(dv);
+      if(d&&typeof dv==='number'){
+        // Excel date cell: if Excel turned M/D/Y text into a date using Day/Month settings,
+        // the day and month come out swapped (e.g. PCSO 2/1/2026 = Feb 1 stored as Jan 2)
+        const p=XLSX.SSF.parse_date_code(dv),sw=p.d<=12&&p.d!==p.m?impYMD(p.y,p.d,p.m):null;
+        if(sw&&(dm==='swap'||(dm==='auto'&&!drawDay(g,d)&&drawDay(g,sw)))){d=sw;swapN++}}
+      if(!d){errs.push(where+': no valid draw date (expected Month/Day/Year)');continue}
+      if(!drawDay(g,d)){offN++;if(offEx.length<5)offEx.push(g+' '+fmtS(d)+' '+d.slice(0,4)+' ('+where+')')}
       const n=parse(impNums(row,m),g);
       if(typeof n==='string'){errs.push(where+' ('+d+'): '+n);continue}
       const k=g+'|'+d;if(seen.has(k)){dupF++;continue}seen.add(k);
       const j=m&&m.jack!=null?Math.round(+String(row[m.jack]).replace(/[^\d.]/g,'')||0):0;
       out.push({g,d,n,j})}});
-  return{out,errs,skip,dupF}}
+  return{out,errs,skip,dupF,swapN,offN,offEx}}
 
 function impPreview(){
   if(!impSheets)return;
-  const{out,errs,skip,dupF}=impBuild(),ow=$('ho').checked;
+  const{out,errs,skip,dupF,swapN,offN,offEx}=impBuild(),ow=$('ho').checked;
   const idx=new Map(S.draws.map(x=>[x.g+'|'+x.d,x])),per={},plan=[];let add=0,upd=0,diffSkipped=0;
   out.forEach(x=>{const ex=idx.get(x.g+'|'+x.d),p=per[x.g]||(per[x.g]={n:0,same:0,diff:0,lo:x.d,hi:x.d});
     if(x.d<p.lo)p.lo=x.d;if(x.d>p.hi)p.hi=x.d;
     if(!ex){p.n++;add++;plan.push(x)}
     else if(dash(ex.n)===dash(x.n)){p.same++;if(x.j&&!ex.j){upd++;plan.push(x)}} // fill in a missing jackpot
     else{p.diff++;if(ow){upd++;plan.push(x)}else diffSkipped++}});
-  impPlan=plan;
+  // results saved earlier on the day/month-swapped date with the same numbers are mis-dated copies: remove them
+  const fixes=[];
+  out.forEach(x=>{const y=+x.d.slice(0,4),mo=+x.d.slice(5,7),dd=+x.d.slice(8,10);if(dd>12||dd===mo)return;
+    const sw=impYMD(y,dd,mo),tw=idx.get(x.g+'|'+sw);
+    if(tw&&dash(tw.n)===dash(x.n)&&!drawDay(x.g,sw))fixes.push(tw.id)});
+  impPlan=plan;impFixes=fixes;
   const games=Object.keys(per).sort();
   let h=`<div class="meta"><b>${esc(impFile)}</b> · ${out.length.toLocaleString()} valid result${out.length===1?'':'s'} found</div>`;
   if(games.length)h+=`<div class="scroll"><table><thead><tr><th>Game</th><th>Dates</th><th>New</th><th>Have</th><th>Differ</th></tr></thead><tbody>${games.map(g=>{const p=per[g];return`<tr><td><b>${g}</b></td><td>${fmtS(p.lo)} ${p.lo.slice(0,4)} – ${fmtS(p.hi)} ${p.hi.slice(0,4)}</td><td>${p.n}</td><td>${p.same}</td><td>${p.diff}</td></tr>`}).join('')}</tbody></table></div>`;
   const notes=[];
+  if(swapN)notes.push(`${swapN} Excel date${swapN>1?'s were':' was'} read with day and month swapped back to Month/Day/Year.`);
+  if(fixes.length)notes.push(`${fixes.length} result${fixes.length>1?'s':''} saved earlier on the wrong (day/month swapped) date will be removed.`);
+  if(offN)notes.push(`${offN} result${offN>1?'s fall':' falls'} on a day that isn’t a usual draw day — check the dates, e.g. ${offEx.map(esc).join('; ')}.`);
   if(diffSkipped)notes.push(`${diffSkipped} result${diffSkipped>1?'s':''} differ from what you already have and will be left alone. Tick “Overwrite” to replace them.`);
   if(skip)notes.push(`${skip} row${skip>1?'s':''} from other games skipped.`);
   if(dupF)notes.push(`${dupF} duplicate row${dupF>1?'s':''} in the file ignored.`);
@@ -810,16 +832,16 @@ function impPreview(){
   if(errs.length)h+=`<details><summary>${errs.length} row${errs.length>1?'s':''} couldn’t be read</summary><ul>${errs.slice(0,25).map(e=>`<li>${esc(e)}</li>`).join('')}${errs.length>25?`<li>…and ${errs.length-25} more</li>`:''}</ul></details>`;
   if(!out.length&&!errs.length&&!skip)h+='<div class="err">No results found. Make sure the sheet has a date column and the 6 winning numbers.</div>';
   $('hp').innerHTML=h;
-  const b=$('hb');b.disabled=!plan.length;
-  b.textContent=plan.length?`Import ${add.toLocaleString()} new${upd?` + update ${upd}`:''}`:'Nothing new to import'}
+  const b=$('hb');b.disabled=!plan.length&&!fixes.length;
+  b.textContent=plan.length||fixes.length?`Import ${add.toLocaleString()} new${upd?` + update ${upd}`:''}${fixes.length?` + fix ${fixes.length}`:''}`:'Nothing new to import'}
 
 function impApply(){
-  if(!impPlan||!impPlan.length)return;const plan=impPlan;dlg.close();
-  mutate(()=>{const idx=new Map(S.draws.map(x=>[x.g+'|'+x.d,x]));
+  const plan=impPlan||[],fixes=new Set(impFixes);if(!plan.length&&!fixes.size)return;dlg.close();
+  mutate(()=>{if(fixes.size)S.draws=S.draws.filter(x=>!fixes.has(x.id));const idx=new Map(S.draws.map(x=>[x.g+'|'+x.d,x]));
     plan.forEach(x=>{const ex=idx.get(x.g+'|'+x.d);
       if(ex){ex.n=x.n;if(x.j)ex.j=x.j}
       else{const nd={id:uid(),g:x.g,d:x.d,n:x.n,j:x.j};S.draws.push(nd);idx.set(x.g+'|'+x.d,nd)}})},
-  `Imported ${plan.length.toLocaleString()} result${plan.length>1?'s':''}`)}
+  `Imported ${plan.length.toLocaleString()} result${plan.length===1?'':'s'}${fixes.size?`, fixed ${fixes.size} mis-dated`:''}`)}
 
 /* ---------- filters ---------- */
 function range(){const t=new Date(),y=t.getFullYear(),m=t.getMonth(),f=(a,b,c)=>iso(new Date(a,b,c));
