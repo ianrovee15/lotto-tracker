@@ -1108,7 +1108,7 @@ function mSmartPick(p='m'){
   const strat=$(p+'strat')?$(p+'strat').value:'hybrid';
   const c=dash(generateSmartPickAdvanced(g, strat));
   pickMeta.set(g+'|'+c,{src:'smart',strat});
-  mAppend(c,p);xplOpen[p]=true;renderExplain(p);
+  xplOpen[p]=false;mAppend(c,p);
 }
 
 /* ---------- SYSTEM BET MODAL ---------- */
