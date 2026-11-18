@@ -124,6 +124,32 @@ dialog::backdrop{background:rgba(0,0,0,.55)}
 .whyh .b:active{transform:none}
 .b.rep{outline:2px solid var(--ink);outline-offset:1px}
 .whn{font-size:11px;color:var(--mut)}
+/* pick explanations */
+.xpl{margin-top:8px}
+.xpl>summary{cursor:pointer;font-size:13px;font-weight:600;color:var(--blue);padding:4px 0}
+:root[data-theme="dark"] .xpl>summary{color:#5fa8e0}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .xpl>summary{color:#5fa8e0}}
+.xc{border:1px solid var(--line);border-radius:10px;padding:10px;margin:8px 0;background:var(--bg);display:grid;gap:8px}
+.xh{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
+.xh .b{cursor:default}.xh .b:active{transform:none}
+.xs{font-size:12px;line-height:1.45}
+.xs b{font-weight:700}
+.xn{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:6px}
+.xnc{border:1px solid var(--line);border-radius:8px;padding:6px 8px;font-size:11px;line-height:1.4;background:var(--card)}
+.xnc .t{display:flex;align-items:center;gap:6px;font-size:12px;font-weight:700;margin-bottom:2px}
+.xnc .t .b{width:24px;height:24px;font-size:11px;cursor:default}
+.xbar{height:4px;border-radius:2px;background:var(--line);margin-top:4px;overflow:hidden}
+.xbar i{display:block;height:100%;background:var(--orange)}
+/* sum ratio */
+.sumbox{margin-top:8px;border:1px solid var(--line);border-radius:10px;padding:8px 10px;background:var(--bg);display:grid;gap:6px}
+.srow{display:grid;grid-template-columns:auto 1fr;gap:4px 10px;align-items:center;font-size:12px}
+.srow .lbl{font-weight:700;white-space:nowrap}
+.strk{position:relative;height:10px;border-radius:5px;background:var(--line)}
+.strk .gold{position:absolute;top:0;bottom:0;background:rgba(46,125,50,.45);border-radius:5px}
+.strk .avg{position:absolute;top:-2px;bottom:-2px;width:2px;background:var(--mut)}
+.strk .mk{position:absolute;top:-3px;width:16px;height:16px;margin-left:-8px;border-radius:50%;background:var(--orange);border:2px solid var(--card)}
+.strk .mk.out{background:#f9a825}
+.stxt{grid-column:2;color:var(--mut);font-size:11px;line-height:1.4}
 /* history import */
 .imp table{min-width:0}
 .imp details{margin-top:8px;font-size:12px}
@@ -244,7 +270,7 @@ body.locked main{display:none}
     
     <!-- Strategy & Generator Toolbar -->
     <div style="margin-top:6px;display:flex;gap:4px;flex-wrap:wrap;align-items:center">
-      <select id="istrat" style="padding:4px 8px;font-size:12px;">
+      <select id="istrat" style="padding:4px 8px;font-size:12px;" onchange="renderExplain('i')">
         <option value="hybrid">⚖️ Balanced Hybrid</option>
         <option value="hot">🔥 Hot Streak</option>
         <option value="cold">❄️ Overdue (Cold)</option>
@@ -257,6 +283,7 @@ body.locked main{display:none}
     <div class="meta" id="ihist" style="margin-top:4px"></div>
     
     <div id="isynergy"></div>
+    <div id="iexplain"></div>
     <div id="if"></div>
     <div class="two"><div><label>Cost per bet (₱)</label><input type="number" id="ic" min="0" value="25"></div>
     <div><label>Play for</label><select id="ir"><option value="1">This draw only</option><option value="2">2 draws (this + next 1)</option><option value="3">3 draws (this + next 2)</option><option value="4">4 draws (this + next 3)</option><option value="5">5 draws (this + next 4)</option></select></div></div>
@@ -411,38 +438,33 @@ function calculateAbsenceGaps(gameKey, beforeDate = null) {
   return result;
 }
 
-function generateSmartPickAdvanced(gameKey, strategy = 'hybrid', beforeDate = null) {
+// Shared scoring: the exact weights the generator draws from, also used to explain picks.
+function smartModel(gameKey, strategy = 'hybrid', beforeDate = null) {
   const max = G[gameKey].max;
   const history = getDrawHistoryBefore(gameKey, beforeDate);
   const gaps = calculateAbsenceGaps(gameKey, beforeDate);
-  
-  // Frequencies calculation
-  const freq = {};
-  for (let i = 1; i <= max; i++) freq[i] = 1;
-  history.slice(-15).forEach(d => {
-    d.n.forEach(n => { if (freq[n]) freq[n] += 4; });
-  });
-  // Long-term frequency: once there's a decent history (e.g. imported), blend in
-  // how often each number has come up over the whole record, relative to expected.
-  if (history.length >= 30) {
-    const cnt = {};
-    history.forEach(d => d.n.forEach(n => { cnt[n] = (cnt[n] || 0) + 1; }));
-    const expected = history.length * 6 / max;
-    for (let i = 1; i <= max; i++) freq[i] += Math.round(3 * (cnt[i] || 0) / expected);
-  }
-
-  const pool = [];
+  const recent = {}, cnt = {}, freq = {}, weight = {};
+  for (let i = 1; i <= max; i++) { recent[i] = 0; cnt[i] = 0; freq[i] = 1; }
+  history.slice(-15).forEach(d => d.n.forEach(n => { recent[n]++; freq[n] += 4; }));
+  history.forEach(d => d.n.forEach(n => { cnt[n]++; }));
+  const expected = history.length * 6 / max;
+  // Long-term frequency: once there's a decent history, blend in each number's overall rate vs expected.
+  if (history.length >= 30) for (let i = 1; i <= max; i++) freq[i] += Math.round(3 * cnt[i] / expected);
+  let total = 0;
   for (let num = 1; num <= max; num++) {
-    let weight = 1;
-    if (strategy === 'hot') {
-      weight = freq[num];
-    } else if (strategy === 'cold') {
-      weight = Math.max(1, Math.round(gaps[num].currentGap));
-    } else if (strategy === 'golden' || strategy === 'hybrid') {
-      weight = freq[num] + Math.round(gaps[num].currentGap / 2);
-    }
-    for (let w = 0; w < weight; w++) pool.push(num);
+    let w = 1;
+    if (strategy === 'hot') w = freq[num];
+    else if (strategy === 'cold') w = Math.max(1, Math.round(gaps[num].currentGap));
+    else if (strategy === 'golden' || strategy === 'hybrid') w = freq[num] + Math.round(gaps[num].currentGap / 2);
+    weight[num] = w; total += w;
   }
+  return { max, history, gaps, recent, cnt, expected, freq, weight, total, recentN: Math.min(15, history.length) };
+}
+
+function generateSmartPickAdvanced(gameKey, strategy = 'hybrid', beforeDate = null) {
+  const { max, weight } = smartModel(gameKey, strategy, beforeDate);
+  const pool = [];
+  for (let num = 1; num <= max; num++) for (let w = 0; w < weight[num]; w++) pool.push(num);
 
   const minSum = G[gameKey].minSum;
   const maxSum = G[gameKey].maxSum;
@@ -484,6 +506,7 @@ function analyzeSynergy(prefix = 'i') {
   const lines = text.split('\n').map(x => x.trim()).filter(Boolean);
   const container = $(prefix + 'synergy');
   if (!container) return;
+  renderExplain(prefix);
 
   if (lines.length < 1) {
     container.innerHTML = '';
@@ -547,6 +570,101 @@ function analyzeSynergy(prefix = 'i') {
   }
   container.innerHTML = html;
 }
+
+/* ---------- FEATURE 7: "WHY THIS PICK?" EXPLANATIONS ---------- */
+const pickMeta=new Map(),xplOpen={i:false,m:false};
+const STRAT={
+  hybrid:['⚖️ Balanced Hybrid','Each number is weighted by how often it came up in the last 15 draws and over the whole history, plus half of how long it has been missing — so numbers that are active <i>and</i> due get the biggest share.'],
+  hot:['🔥 Hot Streak','Each number is weighted by how often it came up in the last 15 draws and over the whole history. Recently busy numbers get the biggest share.'],
+  cold:['❄️ Overdue (Cold)','Each number is weighted by how many draws it has been missing. The longer the absence, the bigger its share.'],
+  golden:['📐 Golden Ratio Sum','Same weighting as Balanced Hybrid, but any combination whose total falls outside the golden range is thrown out and redrawn.']};
+const SRC={random:'🎲 Random pick — every number had an equal chance.',wheel:'⚙️ From your System Bet / Wheel pool.'};
+
+// Where a line's total sits: against every possible sum, the golden range, and your past results.
+function sumInfo(g,n,beforeDate=null){
+  const max=G[g].max,lo=G[g].minSum,hi=G[g].maxSum,min=21,top=6*max-15,sum=n.reduce((a,b)=>a+b,0);
+  const H=getDrawHistoryBefore(g,beforeDate).map(d=>d.n.reduce((a,b)=>a+b,0));
+  const avg=H.length?H.reduce((a,b)=>a+b,0)/H.length:(min+top)/2;
+  const below=H.filter(t=>t<sum).length,equal=H.filter(t=>t===sum).length;
+  const pct=H.length?Math.round(100*(below+equal/2)/H.length):null;
+  const inGold=H.length?Math.round(100*H.filter(t=>t>=lo&&t<=hi).length/H.length):null;
+  return{sum,lo,hi,min,top,avg,pct,inGold,n:H.length,ok:sum>=lo&&sum<=hi,pos:v=>Math.max(0,Math.min(100,100*(v-min)/(top-min)))}}
+function sumRow(g,n,label,beforeDate=null){
+  const S2=sumInfo(g,n,beforeDate),r=S2.sum/S2.avg;
+  const where=S2.ok?`✓ inside golden ${S2.lo}–${S2.hi}`:`⚠ ${S2.sum<S2.lo?'below':'above'} golden ${S2.lo}–${S2.hi}`;
+  const vs=S2.n?` · ${(r).toFixed(2)}× the average past sum (${Math.round(S2.avg)}) · higher than ${S2.pct}% of ${S2.n} past draws`:'';
+  return`<div class="srow"><span class="lbl">${label} · Σ ${S2.sum}</span><div class="strk" title="Possible sums ${S2.min}–${S2.top}"><span class="gold" style="left:${S2.pos(S2.lo)}%;width:${S2.pos(S2.hi)-S2.pos(S2.lo)}%"></span>${S2.n?`<span class="avg" style="left:${S2.pos(S2.avg)}%" title="Average past sum"></span>`:''}<span class="mk ${S2.ok?'':'out'}" style="left:${S2.pos(S2.sum)}%"></span></div><div class="stxt">${where}${vs}</div></div>`}
+function sumBox(g,combos,beforeDate=null){
+  const cap=8,shown=combos.slice(0,cap),ok=combos.filter(n=>sumInfo(g,n).ok).length,i0=sumInfo(g,combos[0],beforeDate);
+  const avgLine=combos.length>1?`<div class="xs">Across ${combos.length} lines: average Σ <b>${Math.round(combos.reduce((a,n)=>a+n.reduce((x,y)=>x+y,0),0)/combos.length)}</b> · <b>${ok} of ${combos.length}</b> inside the golden range.</div>`:'';
+  return`<div class="sumbox"><div class="xs"><b>📐 Sum ratio</b> <span class="meta">— green band = golden range${i0.n?`, grey tick = your past ${g} average (${Math.round(i0.avg)}); ${i0.inGold}% of past draws landed in the band`:''}</span></div>
+   ${shown.map((n,i)=>sumRow(g,n,combos.length>1?'Line '+(i+1):'Your line',beforeDate)).join('')}${combos.length>cap?`<div class="meta">First ${cap} of ${combos.length} lines shown.</div>`:''}${avgLine}</div>`}
+
+function renderExplain(p){
+  const box=$(p+'explain');if(!box)return;
+  const g=p==='i'?cur:($('mg')?$('mg').value:cur);
+  const lines=$(p+'t').value.split('\n').map(x=>x.trim()).filter(Boolean);
+  const combos=[];lines.forEach(l=>{const n=parse(l,g);if(Array.isArray(n))combos.push(n)});
+  if(!combos.length){box.innerHTML='<div class="meta" style="margin-top:6px">🔍 Generate a pick or type a line, and a “Why these numbers?” breakdown appears here.</div>';return}
+  const cap=8,shown=combos.slice(0,cap);
+  const strat=($(p+'strat')||{}).value||'hybrid';
+  box.innerHTML=sumBox(g,combos)+`<details class="xpl" ${xplOpen[p]?'open':''} ontoggle="xplOpen['${p}']=this.open"><summary>🔍 Why these numbers? (${combos.length} line${combos.length>1?'s':''})</summary>
+   ${shown.map((n,i)=>explainCombo(g,n,i+1,pickMeta.get(g+'|'+dash(n)),strat)).join('')}
+   ${combos.length>cap?`<div class="meta">Showing the first ${cap} of ${combos.length} lines.</div>`:''}
+   <div class="meta">The weights show why the generator leaned toward these numbers. Each draw is still random, so they describe the past rather than predict the next result.</div></details>`}
+
+function explainCombo(g,n,lineNo,meta,curStrat,beforeDate=null){
+  const st=meta&&meta.src==='smart'&&STRAT[meta.strat]?meta.strat:curStrat;
+  const M=smartModel(g,st,beforeDate),H=M.history,fair=100/M.max,today=todayS();
+  // ---- per-number cards
+  const cards=n.map(v=>{
+    const gp=M.gaps[v],rec=M.recent[v],ratio=M.expected?M.cnt[v]/M.expected:0,share=100*M.weight[v]/M.total;
+    const hot=rec>=3,cold=!hot&&H.length>=5&&gp.isOverdue;
+    const tag=H.length<5?'':hot?'🔥 Hot':cold?'❄️ Overdue':'· Neutral';
+    const why=[];
+    if(H.length){why.push(`${rec}× in last ${M.recentN}`);why.push(`${M.cnt[v]}× in ${H.length} draws${H.length>=30?` (${ratio.toFixed(1)}× avg)`:''}`);
+      why.push(gp.currentGap>=H.length&&M.cnt[v]===0?'never drawn yet':gp.currentGap===0?`in the latest draw (usual gap ${gp.avgGap})`:`missing ${gp.currentGap} draw${gp.currentGap===1?'':'s'} (usual gap ${gp.avgGap})`)}
+    else why.push('no history yet');
+    const showW=meta&&meta.src==='smart';
+    return`<div class="xnc"><div class="t"><span class="b ${hot?'hot':cold?'cold':''}">${pad(v)}</span>${tag}</div>${why.join('<br>')}${showW?`<div class="xbar" title="Share of the pick pool"><i style="width:${Math.min(100,share/fair*50)}%"></i></div><span class="meta">pick chance ${share.toFixed(1)}% vs ${fair.toFixed(1)}% fair</span>`:''}</div>`}).join('');
+  // ---- combo patterns
+  const sum=n.reduce((a,b)=>a+b,0),lo=G[g].minSum,hi=G[g].maxSum,sumOk=sum>=lo&&sum<=hi;
+  const odd=n.filter(v=>v%2).length,half=Math.floor(M.max/2),low=n.filter(v=>v<=half).length;
+  const pairs=[];for(let i=0;i<5;i++)if(n[i+1]===n[i]+1)pairs.push(pad(n[i])+'–'+pad(n[i+1]));
+  const dec=new Set(n.map(v=>Math.floor(v/10))).size;
+  const pats=[[sumOk,'Golden sum',`Σ ${sum}`,sumOk?`inside ${lo}–${hi}`:`${sum<lo?'below':'above'} ${lo}–${hi}`],
+    [odd>=2&&odd<=4,'Odd / even',`${odd} odd · ${6-odd} even`,''],
+    [low>=2&&low<=4,'Low / high',`${low} low · ${6-low} high`,`split at ${half}/${half+1}`],
+    [pairs.length<=1,'Consecutive',pairs.length?pairs.join(', '):'None',''],
+    [dec>=3,'Spread',`${dec} decade group${dec>1?'s':''}`,dec>=3?'well spread':'clustered']];
+  const score=pats.filter(x=>x[0]).length;
+  // how often draws in history look like this one
+  let sumPct='';if(H.length>=10){const inR=H.filter(d=>{const t=d.n.reduce((a,b)=>a+b,0);return t>=lo&&t<=hi}).length;sumPct=` ${Math.round(100*inR/H.length)}% of your ${H.length} past ${g} results had a sum in the golden range.`}
+  // ---- history check
+  let hist='<div class="meta">No past results for this game yet — import history to see how this line would have done.</div>';
+  if(H.length){let best=null,wins=[0,0,0,0,0,0,0],exact=null;
+    H.forEach(d=>{const sh=d.n.filter(v=>n.includes(v));wins[sh.length]++;if(sh.length===6)exact=d;if(!best||sh.length>best.sh.length||(sh.length===best.sh.length&&d.d>best.d.d))best={d,sh}});
+    const w3=wins[3]+wins[4]+wins[5]+wins[6];
+    hist=`<div class="xs">📜 <b>Against ${H.length} ${beforeDate?'earlier':'past'} results:</b> ${exact?`🏆 this exact combination was drawn on ${fmt(exact.d)}.`:'never drawn as a full combination.'}
+     Best match: <b>${best.sh.length} of 6</b> on ${fmt(best.d.d)}${best.sh.length?` (${best.sh.map(pad).join(', ')})`:''}.
+     It would have matched 3+ numbers in <b>${w3}</b> draw${w3===1?'':'s'}${w3?` (${[3,4,5,6].filter(k=>wins[k]).map(k=>wins[k]+'× '+k).join(', ')})`:''}.</div>`}
+  // ---- header
+  const src=meta?meta.src==='smart'?`🧠 Smart Pick · ${STRAT[st][0]}`:meta.src==='random'?'🎲 Random':'⚙️ Wheel':'✍️ Your line';
+  const how=meta&&meta.src==='smart'?`<div class="xs">${STRAT[st][1]} It also rejects lines that are all odd/all even or have 2+ consecutive pairs.</div>`:meta&&SRC[meta.src]?`<div class="xs">${SRC[meta.src]}</div>`:'';
+  const hotN=n.filter(v=>M.recent[v]>=3).length,coldN=n.filter(v=>M.recent[v]<3&&H.length>=5&&M.gaps[v].isOverdue).length;
+  const summary=H.length>=5?`<div class="xs"><b>${hotN} hot</b>, <b>${coldN} overdue</b> and <b>${6-hotN-coldN} neutral</b> number${6-hotN-coldN===1?'':'s'} · fits <b>${score} of 5</b> common draw patterns.${sumPct}</div>`:`<div class="xs">Fits <b>${score} of 5</b> common draw patterns.</div>`;
+  return`<div class="xc"><div class="xh"><b style="font-size:13px">Line ${lineNo} · ${src}</b>${balls(n)}</div>${how}${summary}
+   ${sumRow(g,n,'Sum',beforeDate)}
+   <div class="whyg">${pats.map(([ok,t,v,note])=>`<div class="whc ${ok?'':'w'}"><b>${t}</b>${v}${note?`<br><span class="meta">${note}</span>`:''}</div>`).join('')}</div>
+   ${H.length?`<div class="xn">${cards}</div>`:''}${hist}</div>`}
+
+const srcOf=(g,n)=>{const m=pickMeta.get(g+'|'+dash(n));return m?(m.src==='smart'?{src:'smart',st:m.strat}:{src:m.src}):{}};
+function openWhyBet(id){const b=S.bets.find(x=>x.id==id);if(!b)return;
+  const meta=b.src?{src:b.src,strat:b.st}:null,w=findDraw(b.g,b.d);
+  shell('🔍 Why these numbers?',`<div class="meta">${b.g} bet for ${fmt(b.d)} — explained using only the results that existed before that draw.${w?` Result: <b>${b.n.filter(x=>w.n.includes(x)).length} of 6</b> matched (${dash(w.n)}).`:''}</div>
+   ${explainCombo(b.g,b.n,1,meta,'hybrid',b.d).replace('Line 1 · ','')}
+   <div class="meta">${meta?'':'This bet was saved before pick sources were recorded (or typed in), so it’s shown as your own line. '}Each draw is still random — this describes the past, not the next result.</div>`,
+   '<button class="s" onclick="dlg.close()">Close</button>')}
 
 /* ---------- FEATURE 2: BACKTESTING SIMULATOR ---------- */
 function openSimModal() {
@@ -879,7 +997,7 @@ function renderInline(){if(inG!==cur){inG=cur;$('id').value=nextDraw(cur);$('xd'
  const hn=S.draws.filter(x=>x.g===cur).length;
  $('ihist').textContent=hn?`🧠 Smart Pick is using ${hn.toLocaleString()} past ${cur} result${hn===1?'':'s'}${hn<30?' — import more with 📥 Import history':''}`:'🧠 No history yet — use 📥 Import history to load past results for Smart Pick';
  const l=S.favs.filter(f=>f.g===cur);
- $('if').innerHTML=l.length?'<div class="meta" style="margin-top:6px">Favorites — tap to add:</div>'+l.map(f=>`<button class="chip" type="button" onclick="mAdd(${f.id},'i')">⭐ ${esc(f.name||dash(f.n))}</button>`).join(''):''}
+ $('if').innerHTML=l.length?'<div class="meta" style="margin-top:6px">Favorites — tap to add:</div>'+l.map(f=>`<button class="chip" type="button" onclick="mAdd(${f.id},'i')">⭐ ${esc(f.name||dash(f.n))}</button>`).join(''):'';analyzeSynergy('i')}
 function fillBet(g,text){cur=g;render();mAppend(text,'i');$('it').focus();$('it').scrollIntoView({behavior:'smooth',block:'center'})}
 function fillRes(g,d){cur=g;render();$('xd').value=d;renderInline();const ex=findDraw(g,d);$('xt').value=ex?dash(ex.n):'';$('xj').value=ex&&ex.j?ex.j:'';$('xt').focus();$('xt').scrollIntoView({behavior:'smooth',block:'center'})}
 function lists(){renderBets();renderDraws();renderTable()}
@@ -905,7 +1023,7 @@ function renderBets(){const all=S.bets.filter(b=>b.g===cur).sort((a,b)=>b.d.loca
  $('bcount').textContent=all.length?`Showing ${list.length} of ${all.length}`:'';
  $('bets').innerHTML=list.map(b=>{const i=info(b);let tag='<span class="tag">Pending</span>';
   if(i.w)tag=i.k>=3?`<span class="tag win">${i.k===6?'🏆 JACKPOT':i.k+' of 6 — prize!'}</span>`:`<span class="tag">${i.k} of 6</span>`;
-  return`<div class="row"><div class="c1">${fmt(b.d)}</div>${balls(b.n,i.hit)}<div class="c3"><div class="l1"><span class="amt">Cost ${peso(b.c)}</span>${tag}</div><div class="acts"><button class="ib" title="Edit" onclick="openBet({id:${b.id},g:'${b.g}',d:'${b.d}',text:'${dash(b.n)}',c:${b.c}})">✎</button><button class="ib" title="Repeat for next draw" onclick="repBet(${b.id})">↻</button><button class="ib" title="Save as favorite" onclick="openFav({g:'${b.g}',text:'${dash(b.n)}'})">☆</button><button class="ib" title="Delete" onclick="delBet(${b.id})">×</button></div></div></div>`}).join('')
+  return`<div class="row"><div class="c1">${fmt(b.d)}</div>${balls(b.n,i.hit)}<div class="c3"><div class="l1"><span class="amt">Cost ${peso(b.c)}</span>${tag}</div><div class="acts"><button class="ib" title="Edit" onclick="openBet({id:${b.id},g:'${b.g}',d:'${b.d}',text:'${dash(b.n)}',c:${b.c}})">✎</button><button class="ib" title="Why these numbers?" onclick="openWhyBet(${b.id})">🔍</button><button class="ib" title="Repeat for next draw" onclick="repBet(${b.id})">↻</button><button class="ib" title="Save as favorite" onclick="openFav({g:'${b.g}',text:'${dash(b.n)}'})">☆</button><button class="ib" title="Delete" onclick="delBet(${b.id})">×</button></div></div></div>`}).join('')
   ||`<div class="meta">${all.length?'No bets match these filters.':'No bets yet for this game. Tap “＋ Add bets”.'}</div>`}
 /* ---------- draw analysis ("Why this combo?") ---------- */
 const whyOpen=new Set();
@@ -974,7 +1092,7 @@ function openBet(o={}){const g=o.g||cur,d=o.d||nextDraw(g),ed=!!o.id;
  <label>Game</label><select id="mg" onchange="mChange()">${gopts(g)}</select>
  <label>Draw date</label><input type="date" id="md" value="${d}" onchange="mChange()"><div class="meta" id="mn"></div>
  <label>${ed?'Numbers':'Numbers — one combination per line'}</label><textarea id="mt" rows="${ed?1:4}" placeholder="05-12-18-27-33-41" oninput="analyzeSynergy('m')">${esc(o.text||'')}</textarea>
- ${ed?'':'<div style="margin-top:6px;display:flex;gap:4px;flex-wrap:wrap;align-items:center"><select id="mstrat" style="padding:4px 8px;font-size:12px;"><option value="hybrid">⚖️ Balanced Hybrid</option><option value="hot">🔥 Hot Streak</option><option value="cold">❄️ Overdue (Cold)</option><option value="golden">📐 Golden Ratio Sum</option></select><button class="chip smart" type="button" onclick="mSmartPick()">🧠 Smart Pick</button><button class="chip" type="button" onclick="mLucky()">🎲 Random</button><button class="chip go" type="button" onclick="openWheelModal()">⚙️ System Bet / Wheel</button></div><div id="msynergy"></div><div id="mf"></div>'}
+ ${ed?'':'<div style="margin-top:6px;display:flex;gap:4px;flex-wrap:wrap;align-items:center"><select id="mstrat" style="padding:4px 8px;font-size:12px;" onchange="renderExplain(\'m\')"><option value="hybrid">⚖️ Balanced Hybrid</option><option value="hot">🔥 Hot Streak</option><option value="cold">❄️ Overdue (Cold)</option><option value="golden">📐 Golden Ratio Sum</option></select><button class="chip smart" type="button" onclick="mSmartPick()">🧠 Smart Pick</button><button class="chip" type="button" onclick="mLucky()">🎲 Random</button><button class="chip go" type="button" onclick="openWheelModal()">⚙️ System Bet / Wheel</button></div><div id="msynergy"></div><div id="mexplain"></div><div id="mf"></div>'}
  <label>Cost per bet (₱)</label><input type="number" id="mc" min="0" value="${o.c??25}">
  ${ed?'':'<label>Play for</label><select id="mr"><option value="1">This draw only</option><option value="2">2 draws (this + next 1)</option><option value="3">3 draws (this + next 2)</option><option value="4">4 draws (this + next 3)</option><option value="5">5 draws (this + next 4)</option></select>'}
  <div class="err" id="me"></div>`,`${cancelBtn}<button class="p2" onclick="saveBet(${ed?o.id:0})">${ed?'Save changes':'Save'}</button>`);mChange()}
@@ -984,11 +1102,13 @@ function mChange(){const g=$('mg').value,d=$('md').value;
   mf.innerHTML=l.length?'<div class="meta" style="margin-top:6px">Tap a favorite to add it:</div>'+l.map(f=>`<button class="chip" type="button" onclick="mAdd(${f.id})">⭐ ${esc(f.name||dash(f.n))}</button>`).join(''):''}}
 function mAppend(text,p='m'){const t=$(p+'t');t.value=t.value.trim()?t.value.replace(/\s*$/,'')+'\n'+text:text;analyzeSynergy(p);}
 const mAdd=(id,p='m')=>mAppend(dash(S.favs.find(f=>f.id==id).n),p);
-function mLucky(p='m'){const m=G[p==='m'?$('mg').value:cur].max,a=new Set();while(a.size<6)a.add(1+Math.floor(Math.random()*m));mAppend(dash([...a].sort((x,y)=>x-y)),p)}
+function mLucky(p='m'){const g=p==='m'?$('mg').value:cur,m=G[g].max,a=new Set();while(a.size<6)a.add(1+Math.floor(Math.random()*m));const c=dash([...a].sort((x,y)=>x-y));pickMeta.set(g+'|'+c,{src:'random'});mAppend(c,p)}
 function mSmartPick(p='m'){
   const g=p==='m'?$('mg').value:cur;
   const strat=$(p+'strat')?$(p+'strat').value:'hybrid';
-  mAppend(dash(generateSmartPickAdvanced(g, strat)),p);
+  const c=dash(generateSmartPickAdvanced(g, strat));
+  pickMeta.set(g+'|'+c,{src:'smart',strat});
+  mAppend(c,p);xplOpen[p]=true;renderExplain(p);
 }
 
 /* ---------- SYSTEM BET MODAL ---------- */
@@ -1062,7 +1182,7 @@ function applyWheelCombos() {
   }
   
   const combos = getCombinations(parsed, 6);
-  combos.forEach(c => mAppend(dash(c), $('mt') ? 'm' : 'i'));
+  combos.forEach(c => { pickMeta.set(gameKey+'|'+dash(c), {src:'wheel'}); mAppend(dash(c), $('mt') ? 'm' : 'i'); });
   dlg.close();
   toast(`Added ${combos.length} wheeled combinations!`);
 }
@@ -1074,13 +1194,13 @@ function saveBet(eid,p='m'){const g=p==='m'?$('mg').value:cur,d=$(p+'d').value,c
  if(eid&&lines.length>1){err.textContent='Edit one combination at a time.';return}
  const combos=[];for(let i=0;i<lines.length;i++){const n=parse(lines[i],g);if(typeof n==='string'){err.textContent=(lines.length>1?'Line '+(i+1)+': ':'')+n;return}combos.push(n)}
  err.textContent='';
- if(p==='m'){cur=g;dlg.close()}else $('it').value='';
+ if(p==='m'){cur=g;dlg.close()}else{$('it').value='';analyzeSynergy('i')}
  if(eid)mutate(()=>Object.assign(S.bets.find(x=>x.id==eid),{g,d,n:combos[0],c}),'Bet updated');
  else{const reps=+$(p+'r').value,ds=[d];while(ds.length<reps)ds.push(nextOnOrAfter(g,addDays(ds[ds.length-1],1)));const cnt=ds.length*combos.length;
-  mutate(()=>ds.forEach(dt=>combos.forEach(n=>S.bets.push({id:uid(),g,d:dt,n,c}))),cnt+' bet'+(cnt>1?'s':'')+' added')}}
+  mutate(()=>ds.forEach(dt=>combos.forEach(n=>S.bets.push({id:uid(),g,d:dt,n,c,...srcOf(g,n)}))),cnt+' bet'+(cnt>1?'s':'')+' added')}}
 function repBet(id){const b=S.bets.find(x=>x.id==id),from=addDays(b.d,1)>todayS()?addDays(b.d,1):todayS(),d=nextOnOrAfter(b.g,from);
  if(S.bets.some(x=>x.g===b.g&&x.d===d&&dash(x.n)===dash(b.n))){toast('Already added for '+fmtS(d));return}
- mutate(()=>S.bets.push({id:uid(),g:b.g,d,n:b.n.slice(),c:b.c}),'Repeated for '+fmt(d))}
+ mutate(()=>S.bets.push({id:uid(),g:b.g,d,n:b.n.slice(),c:b.c,...(b.src?{src:b.src}:{}),...(b.st?{st:b.st}:{})}),'Repeated for '+fmt(d))}
 const delBet=id=>mutate(()=>S.bets=S.bets.filter(b=>b.id!=id),'Bet deleted');
 
 function openRes(o={}){let g=o.g||cur,d=o.d||prevDraw(g),ex=o.id?S.draws.find(x=>x.id==o.id):findDraw(g,d);
